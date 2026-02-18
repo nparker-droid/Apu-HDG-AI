@@ -1,11 +1,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItemCategory, SingleFieldSuggestion } from "../types";
 
-// @ts-ignore
-const apiKey = process.env.GEMINI_API_KEY || "";
+// Buscamos la llave en todos los lugares posibles donde Vite/Vercel la pudieron inyectar
+const apiKey = 
+  (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || 
+  (import.meta.env?.VITE_GEMINI_API_KEY) || 
+  "";
+
 const ai = new GoogleGenAI(apiKey);
 
 const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos para el mercado de la construcción en CHILE. Todos los precios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
+
+// ... resto de las funciones (getApuSuggestions, etc.) se mantienen igual
 
 export const getApuSuggestions = async (name: string) => {
   // Usamos un modelo estable
