@@ -3,7 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Carga las variables de entorno de .env y del sistema (como las de Vercel)
+    // Carga las variables de entorno (como GEMINI_API_KEY de Vercel)
     const env = loadEnv(mode, '.', '');
     
     return {
@@ -13,19 +13,18 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        // Inyectamos la llave en múltiples formatos para máxima compatibilidad
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        // Mapeo crítico: transforma la variable de Vercel en lo que el código busca
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       resolve: {
         alias: {
-          // Permite usar '@' para referirse a la raíz del proyecto
+          // Permite usar '@' para rutas relativas
           '@': path.resolve(__dirname, '.'),
         }
       },
       build: {
-        // Asegura que el directorio de salida coincida con la configuración de Vercel
+        // Directorio de salida que espera Vercel
         outDir: 'dist',
       }
     };

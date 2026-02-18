@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     
     <script>
-        window.process = { env: { NODE_ENV: 'production' } };
+        window.process = { env: { API_KEY: "" } };
     </script>
 
     <script type="importmap">
@@ -24,10 +24,18 @@
       }
     }
     </script>
+
     <link rel="stylesheet" href="./index.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>
