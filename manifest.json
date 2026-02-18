@@ -1,8 +1,8 @@
 
 {
-  "name": "HidroScan - Gestor de Nudos",
-  "short_name": "HidroScan",
-  "description": "Gestor experto de nudos e inventarios para redes de agua potable.",
+  "name": "APU Engine",
+  "short_name": "APU Engine",
+  "description": "Gestor Ánalisis de Precios Unitarios y Presupuestos.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f8fafc",
