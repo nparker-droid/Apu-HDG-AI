@@ -1,9 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { ItemCategory, SingleFieldSuggestion } from "../types";
+import { GoogleGenAI } from "@google/genai";
 
-// Usamos exactamente la misma lógica de tu app exitosa
-// En el navegador, Vite sustituirá process.env.API_KEY por el valor real
-const ai = new GoogleGenAI(process.env.API_KEY || ""); 
+// Inicialización directa igual que en tu app HidroScan
+const ai = new GoogleGenAI(process.env.API_KEY || "");
 
 const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos...";
 
