@@ -1,12 +1,17 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItemCategory, SingleFieldSuggestion } from "../types";
 
-// Esto intentará leer desde el define de Vite o desde una variable global
-const apiKey = (import.meta.env.VITE_GEMINI_API_KEY) || (process.env.GEMINI_API_KEY) || "";
-const ai = new GoogleGenAI({ apiKey });;
+// Priorizamos la variable inyectada por el bloque 'define' de vite.config.ts
+const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
 
-const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos para el mercado de la construcción en CHILE. Todos los precios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
+// Solo inicializamos si la llave existe para evitar el error "API key must be set"
+if (!apiKey) {
+  console.warn("Advertencia: GEMINI_API_KEY no encontrada. La IA no funcionará hasta que se configure.");
+}
+
+const ai = new GoogleGenAI(apiKey); 
+
+const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos...";cios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
 
 export const getApuSuggestions = async (name: string) => {
   const response = await ai.models.generateContent({
