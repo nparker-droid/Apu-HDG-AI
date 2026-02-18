@@ -1,19 +1,18 @@
-import { GoogleGenAI } from "@google/genai";
 
-// Inicialización directa igual que en tu app HidroScan
-const ai = new GoogleGenAI(process.env.API_KEY || "");
+import { GoogleGenAI, Type } from "@google/genai";
+import { ItemCategory, SingleFieldSuggestion } from "../types";
 
-const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos...";
+// The API key must be obtained exclusively from process.env.API_KEY using the named parameter apiKey.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// ... resto de las funciones (getApuSuggestions, etc.) se mantienen igual
+const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos en Chile. Proporcionas análisis técnicos precisos, rendimientos realistas y precios unitarios actualizados para el año 2024-2025 en CLP. No incluyas IVA en los precios.";
 
 export const getApuSuggestions = async (name: string) => {
-  // Usamos un modelo estable
-  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-  
-  const response = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: `${SYSTEM_CONTEXT} Genera un análisis de precio unitario (APU) detallado para la partida: "${name}". No uses IVA.` }] }],
-    generationConfig: {
+  // Use ai.models.generateContent with the correct model and prompt structure.
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [{ role: "user", parts: [{ text: `${SYSTEM_CONTEXT} Genera un análisis de precio unitario (APU) detallado para la partida: "${name}".` }] }],
+    config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -63,7 +62,8 @@ export const getApuSuggestions = async (name: string) => {
     }
   });
 
-  return JSON.parse(response.response.text() || '{}');
+  // response.text is a property, not a function.
+  return JSON.parse(response.text || '{}');
 };
 
 export const getDeviationReasoning = async (
@@ -73,9 +73,11 @@ export const getDeviationReasoning = async (
   avgVal: number, 
   type: string
 ): Promise<string> => {
-  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const response = await model.generateContent(`${SYSTEM_CONTEXT} En el contexto de "${description}" (${category}), el usuario ingresó un ${type} de ${userVal} CLP, pero el promedio de mercado es ${avgVal} CLP. Explica brevemente (máx 15 palabras) por qué podría existir esta desviación en Chile 2026.`);
-  return response.response.text()?.trim() || "Desviación fuera de rango.";
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `${SYSTEM_CONTEXT} En el contexto de "${description}" (${category}), el usuario ingresó un ${type} de ${userVal} CLP, pero el promedio de mercado es ${avgVal} CLP. Explica brevemente (máx 15 palabras) por qué podría existir esta desviación en Chile.`
+  });
+  return response.text?.trim() || "Desviación fuera de rango.";
 };
 
 export const getFieldSuggestion = async (
@@ -83,10 +85,10 @@ export const getFieldSuggestion = async (
   description: string, 
   field: 'price' | 'performance'
 ): Promise<SingleFieldSuggestion> => {
-  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const response = await model.generateContent({
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
     contents: [{ role: "user", parts: [{ text: `${SYSTEM_CONTEXT} Sugiere un ${field === 'price' ? 'precio unitario en CLP' : 'rendimiento'} para el recurso "${description}" usado en "${context}".` }] }],
-    generationConfig: {
+    config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -98,5 +100,5 @@ export const getFieldSuggestion = async (
       }
     }
   });
-  return JSON.parse(response.response.text() || '{"value": 0, "reasoning": "Error"}');
+  return JSON.parse(response.text || '{"value": 0, "reasoning": "Error"}');
 };
