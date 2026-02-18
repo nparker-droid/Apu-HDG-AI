@@ -1,0 +1,17 @@
+
+{
+  "short_name": "APU Engine",
+  "name": "Hidrogestión APU Master AI",
+  "icons": [
+    {
+      "src": "logo app.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#004071",
+  "background_color": "#ffffff"
+}
