@@ -2,7 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItemCategory, SingleFieldSuggestion } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Esto intentará leer desde el define de Vite o desde una variable global
+const apiKey = (import.meta.env.VITE_GEMINI_API_KEY) || (process.env.GEMINI_API_KEY) || "";
+const ai = new GoogleGenAI({ apiKey });;
 
 const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos para el mercado de la construcción en CHILE. Todos los precios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
 
