@@ -1,23 +1,24 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItemCategory, SingleFieldSuggestion } from "../types";
 
 // Priorizamos la variable inyectada por el bloque 'define' de vite.config.ts
+// @ts-ignore
 const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
 
-// Solo inicializamos si la llave existe para evitar el error "API key must be set"
+// Solo inicializamos si la llave existe para evitar errores críticos en el navegador
 if (!apiKey) {
-  console.warn("Advertencia: GEMINI_API_KEY no encontrada. La IA no funcionará hasta que se configure.");
+  console.warn("Advertencia: GEMINI_API_KEY no encontrada. La IA no funcionará hasta que se configure en Vercel.");
 }
 
-const ai = new GoogleGenAI(apiKey); 
+const ai = new GoogleGenAI(apiKey);
 
-const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos...";cios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
+const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos para el mercado de la construcción en CHILE. Todos los precios deben ser en PESOS CHILENOS (CLP) vigentes para el año 2026, considerando la inflación proyectada y costos locales de mano de obra y materiales.";
 
 export const getApuSuggestions = async (name: string) => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `${SYSTEM_CONTEXT} Genera un análisis de precio unitario (APU) detallado para la partida: "${name}". No uses IVA.`,
-    config: {
+  const response = await ai.getGenerativeModel({ model: "gemini-1.5-flash" }).generateContent({
+    contents: [{ role: "user", parts: [{ text: `${SYSTEM_CONTEXT} Genera un análisis de precio unitario (APU) detallado para la partida: "${name}". No uses IVA.` }] }],
+    generationConfig: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -67,7 +68,7 @@ export const getApuSuggestions = async (name: string) => {
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  return JSON.parse(response.response.text() || '{}');
 };
 
 export const getDeviationReasoning = async (
@@ -77,11 +78,9 @@ export const getDeviationReasoning = async (
   avgVal: number, 
   type: string
 ): Promise<string> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `${SYSTEM_CONTEXT} En el contexto de "${description}" (${category}), el usuario ingresó un ${type} de ${userVal} CLP, pero el promedio de mercado es ${avgVal} CLP. Explica brevemente (máx 15 palabras) por qué podría existir esta desviación en Chile 2026.`,
-  });
-  return response.text?.trim() || "Desviación fuera de rango estándar.";
+  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const response = await model.generateContent(`${SYSTEM_CONTEXT} En el contexto de "${description}" (${category}), el usuario ingresó un ${type} de ${userVal} CLP, pero el promedio de mercado es ${avgVal} CLP. Explica brevemente (máx 15 palabras) por qué podría existir esta desviación en Chile 2026.`);
+  return response.response.text()?.trim() || "Desviación fuera de rango estándar.";
 };
 
 export const getFieldSuggestion = async (
@@ -89,10 +88,10 @@ export const getFieldSuggestion = async (
   description: string, 
   field: 'price' | 'performance'
 ): Promise<SingleFieldSuggestion> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `${SYSTEM_CONTEXT} Sugiere un ${field === 'price' ? 'precio unitario en CLP' : 'rendimiento'} para el recurso "${description}" usado en "${context}".`,
-    config: {
+  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const response = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: `${SYSTEM_CONTEXT} Sugiere un ${field === 'price' ? 'precio unitario en CLP' : 'rendimiento'} para el recurso "${description}" usado en "${context}".` }] }],
+    generationConfig: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -104,5 +103,5 @@ export const getFieldSuggestion = async (
       }
     }
   });
-  return JSON.parse(response.text || '{"value": 0, "reasoning": "Error"}');
+  return JSON.parse(response.response.text() || '{"value": 0, "reasoning": "Error"}');
 };
