@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, ClipboardPaste, X, Check, Map as MapIcon } from 'lucide-react';
 import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
@@ -40,6 +41,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
   const [bulkText, setBulkText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Cerrar menús al hacer clic fuera del contenedor
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -58,14 +60,16 @@ const SectionTable: React.FC<SectionTableProps> = ({
     STANDARD_LIBRARY.forEach(apu => {
       if (apu.items && apu.items[category]) {
         apu.items[category].forEach(item => {
-          itemsFromLib.push({
-            description: item.description || '',
-            unit: item.unit || '',
-            unitPrice: item.unitPrice || 0,
-            category: category,
-            performance: item.performance || 1,
-            chapterName: 'Catálogo Estándar'
-          });
+          if (item) {
+            itemsFromLib.push({
+              description: item.description || '',
+              unit: item.unit || '',
+              unitPrice: item.unitPrice || 0,
+              category: category,
+              performance: item.performance || 1,
+              chapterName: 'Catálogo Estándar'
+            });
+          }
         });
       }
     });
@@ -73,11 +77,12 @@ const SectionTable: React.FC<SectionTableProps> = ({
   }, [category]);
 
   const filteredHistory = useMemo(() => {
-    // SEGURIDAD: Validar que el índice exista dentro de los límites del array actual
-    if (showHistoryForIdx === null || !items || !items[showHistoryForIdx]) return [];
+    // SEGURIDAD CRÍTICA: Si el índice no es válido para el array actual, abortar inmediatamente
+    if (showHistoryForIdx === null || !items || !items[showHistoryForIdx]) {
+      return [];
+    }
     
     const currentInput = (items[showHistoryForIdx].description || '').toLowerCase().trim();
-    
     const safeHistory = (history || []).filter(h => h && h.category === category);
     const combinedHistory = [...safeHistory, ...libraryItems];
     
@@ -92,7 +97,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
     });
     
     const uniqueHistory = Array.from(uniqueHistoryMap.values());
-
     if (!currentInput) return uniqueHistory.slice(0, 10);
 
     return uniqueHistory
@@ -169,6 +173,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
     const newItems = [...items];
     const item = { ...newItems[index], [field]: value };
     
+    // Normalización de valores para evitar NaN
     const p = parseFloat(String(item.performance ?? 0)) || 0;
     const q = parseFloat(String(item.quantity ?? 0)) || 0;
     const up = parseFloat(String(item.unitPrice ?? 0)) || 0;
@@ -190,8 +195,10 @@ const SectionTable: React.FC<SectionTableProps> = ({
         chapterName
       });
     }
-    // Delay para permitir clics en sugerencias
-    setTimeout(() => setShowHistoryForIdx(null), 200);
+    // Aumentamos el delay para dar tiempo a que los navegadores procesen el click en la sugerencia
+    setTimeout(() => {
+        setShowHistoryForIdx(null);
+    }, 300);
   };
 
   const handleAiFieldSuggestion = async (item: APUItem, field: 'unitPrice' | 'performance') => {
@@ -256,7 +263,8 @@ const SectionTable: React.FC<SectionTableProps> = ({
   };
 
   const selectFromHistory = (idx: number, h: HistoryItem) => {
-    if (!items[idx]) return;
+    // Verificación de seguridad antes de actualizar
+    if (!items || !items[idx]) return;
     const newItems = [...items];
     newItems[idx] = { 
       ...newItems[idx], 
@@ -278,7 +286,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
       <div className="flex justify-between items-center mb-4 px-1">
         <div className="flex items-center gap-2">
            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Desglose de {category}</h4>
-           <span className="bg-slate-100 text-[8px] font-black px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">{items.length} recursos</span>
+           <span className="bg-slate-100 text-[8px] font-black px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">{(items || []).length} recursos</span>
         </div>
         <div className="flex items-center gap-4">
           <button 
@@ -287,7 +295,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
           >
             <ClipboardPaste className="w-3 h-3" /> Pegar Varios (Excel)
           </button>
-          {items.length > 0 && (
+          {(items || []).length > 0 && (
             <button onClick={() => confirm('¿Eliminar todos los recursos?') && onChange([])} className="text-red-400 hover:text-red-600 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-tighter">
               <Eraser className="w-3 h-3" /> Limpiar
             </button>
@@ -335,7 +343,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
           </tr>
         </thead>
         <tbody className="space-y-2">
-          {items.map((item, idx) => (
+          {(items || []).map((item, idx) => (
             <tr key={item.id} className="group bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all">
               <td className="py-3 pl-4 relative">
                 <div className="flex items-center gap-2">
@@ -357,30 +365,38 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 placeholder:text-slate-300 transition-colors" 
                   />
                 </div>
+                {/* LISTA DE SUGERENCIAS CON PROTECCIONES ADICIONALES */}
                 {showHistoryForIdx === idx && filteredHistory.length > 0 && (
                   <div className="absolute z-[100] left-0 top-full mt-2 w-full min-w-[320px] bg-white border border-slate-200 shadow-2xl rounded-[1.5rem] p-3 animate-in fade-in slide-in-from-top-2 transition-colors">
                     <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2">Sugerencias (Biblioteca + Historial)</div>
-                    {filteredHistory.map((h, hIdx) => (
-                      <button 
-                        key={`${h.description}-${hIdx}`} 
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => selectFromHistory(idx, h)} 
-                        className="w-full text-left px-4 py-3 rounded-xl flex justify-between items-center hover:bg-[#004071] hover:text-white transition-all"
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-bold text-xs">{h.description}</span>
-                          <div className="flex items-center gap-1.5">
-                             <span className="text-[8px] uppercase font-black opacity-60">{formatUnit(h.unit)} {h.performance ? `| Rend: ${h.performance.toFixed(3)}` : ''}</span>
-                             {h.chapterName && (
-                               <span className="flex items-center gap-1 text-[7px] font-black text-[#88C13E] bg-[#88C13E]/10 px-1.5 py-0.5 rounded-full uppercase group-hover:bg-white/20 group-hover:text-white">
-                                 <MapIcon className="w-2 h-2" /> {h.chapterName}
-                               </span>
-                             )}
-                          </div>
-                        </div>
-                        <span className="font-mono text-[10px] font-black">${(h.unitPrice || 0).toLocaleString('es-CL')}</span>
-                      </button>
-                    ))}
+                    <div className="max-h-60 overflow-y-auto no-scrollbar">
+                        {filteredHistory.map((h, hIdx) => (
+                        <button 
+                            key={`${h.description}-${hIdx}`} 
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => selectFromHistory(idx, h)} 
+                            className="w-full text-left px-4 py-3 rounded-xl flex justify-between items-center hover:bg-[#004071] hover:text-white transition-all"
+                        >
+                            <div className="flex flex-col">
+                            <span className="font-bold text-xs">{h.description}</span>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[8px] uppercase font-black opacity-60">
+                                    {formatUnit(h.unit || '')} 
+                                    {(h.performance !== undefined && h.performance !== null) ? ` | Rend: ${Number(h.performance).toFixed(3)}` : ''}
+                                </span>
+                                {h.chapterName && (
+                                <span className="flex items-center gap-1 text-[7px] font-black text-[#88C13E] bg-[#88C13E]/10 px-1.5 py-0.5 rounded-full uppercase group-hover:bg-white/20 group-hover:text-white">
+                                    <MapIcon className="w-2 h-2" /> {h.chapterName}
+                                </span>
+                                )}
+                            </div>
+                            </div>
+                            <span className="font-mono text-[10px] font-black">
+                                ${Math.round(h.unitPrice || 0).toLocaleString('es-CL')}
+                            </span>
+                        </button>
+                        ))}
+                    </div>
                   </div>
                 )}
               </td>
@@ -434,7 +450,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                <div className="flex flex-col">
                   <span className="text-[8px] font-bold text-slate-400 uppercase">{activeAlert.isAiSuggestion ? 'Sugerido' : 'Promedio Histórico'}</span>
                   <span className="text-sm font-black text-[#004071] font-mono">
-                    {activeAlert.field === 'unitPrice' ? formatCurrency(activeAlert.avgValue) : (activeAlert.avgValue || 0).toFixed(3)}
+                    {activeAlert.field === 'unitPrice' ? `$${Math.round(activeAlert.avgValue).toLocaleString('es-CL')}` : (activeAlert.avgValue || 0).toFixed(3)}
                   </span>
                </div>
                <button 
