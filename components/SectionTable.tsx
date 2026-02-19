@@ -53,13 +53,15 @@ const SectionTable: React.FC<SectionTableProps> = ({
 
   const libraryItems: HistoryItem[] = useMemo(() => {
     const itemsFromLib: HistoryItem[] = [];
+    if (!STANDARD_LIBRARY) return itemsFromLib;
+
     STANDARD_LIBRARY.forEach(apu => {
       if (apu.items && apu.items[category]) {
         apu.items[category].forEach(item => {
           itemsFromLib.push({
-            description: item.description,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
+            description: item.description || '',
+            unit: item.unit || '',
+            unitPrice: item.unitPrice || 0,
             category: category,
             performance: item.performance || 1,
             chapterName: 'Catálogo Estándar'
@@ -71,9 +73,11 @@ const SectionTable: React.FC<SectionTableProps> = ({
   }, [category]);
 
   const filteredHistory = useMemo(() => {
-    if (showHistoryForIdx === null || !items[showHistoryForIdx]) return [];
+    // SEGURIDAD: Validar que el índice exista dentro de los límites del array actual
+    if (showHistoryForIdx === null || !items || !items[showHistoryForIdx]) return [];
     
-    const currentInput = (items[showHistoryForIdx]?.description || '').toLowerCase().trim();
+    const currentInput = (items[showHistoryForIdx].description || '').toLowerCase().trim();
+    
     const safeHistory = (history || []).filter(h => h && h.category === category);
     const combinedHistory = [...safeHistory, ...libraryItems];
     
@@ -88,6 +92,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
     });
     
     const uniqueHistory = Array.from(uniqueHistoryMap.values());
+
     if (!currentInput) return uniqueHistory.slice(0, 10);
 
     return uniqueHistory
@@ -108,7 +113,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
         description: '', 
         unit: '', 
         quantity: 1, 
-        performance: 1, // Aseguramos que inicie en 1 para evitar errores de cálculo
+        performance: 1, 
         unitPrice: 0, 
         total: 0 
     };
@@ -160,11 +165,10 @@ const SectionTable: React.FC<SectionTableProps> = ({
   };
 
   const updateItem = (index: number, field: keyof APUItem, value: any) => {
-    if (!items[index]) return;
+    if (!items || !items[index]) return;
     const newItems = [...items];
     const item = { ...newItems[index], [field]: value };
     
-    // CORRECCIÓN: Manejo robusto de valores numéricos para evitar NaN o undefined
     const p = parseFloat(String(item.performance ?? 0)) || 0;
     const q = parseFloat(String(item.quantity ?? 0)) || 0;
     const up = parseFloat(String(item.unitPrice ?? 0)) || 0;
@@ -186,11 +190,12 @@ const SectionTable: React.FC<SectionTableProps> = ({
         chapterName
       });
     }
+    // Delay para permitir clics en sugerencias
     setTimeout(() => setShowHistoryForIdx(null), 200);
   };
 
   const handleAiFieldSuggestion = async (item: APUItem, field: 'unitPrice' | 'performance') => {
-    if (!item.description) return alert("Ingrese una descripción para obtener sugerencias.");
+    if (!item || !item.description) return alert("Ingrese una descripción para obtener sugerencias.");
     const fieldKey = `${item.id}-${field}`;
     setIsAiLoadingField(fieldKey);
     setActiveAlert(null);
@@ -209,14 +214,14 @@ const SectionTable: React.FC<SectionTableProps> = ({
         isAiSuggestion: true
       });
     } catch (e) {
-      alert("Error consultando a la IA");
+      console.error(e);
     } finally {
       setIsAiLoadingField(null);
     }
   };
 
   const checkDeviation = async (item: APUItem, field: 'unitPrice' | 'performance') => {
-    if (!item.description || item[field] === 0 || activeAlert?.isAiSuggestion) return;
+    if (!item || !item.description || item[field] === 0 || activeAlert?.isAiSuggestion) return;
     const safeHistory = (history || []).filter(h => h && h.category === category);
     const combinedHistory = [...safeHistory, ...libraryItems];
     const matches = combinedHistory.filter(h => h.description.toLowerCase() === item.description.toLowerCase());
@@ -227,6 +232,8 @@ const SectionTable: React.FC<SectionTableProps> = ({
     
     const avg = values.reduce((acc, curr) => acc + curr, 0) / values.length;
     const userVal = Number(item[field]);
+    if (isNaN(userVal) || avg === 0) return;
+    
     const deviation = Math.abs(userVal - avg) / avg;
 
     if (deviation > 0.25) {
@@ -242,9 +249,15 @@ const SectionTable: React.FC<SectionTableProps> = ({
     }
   };
 
+  const applySuggestion = (itemId: string, field: 'unitPrice' | 'performance', value: number) => {
+    const idx = items.findIndex(i => i.id === itemId);
+    if (idx !== -1) updateItem(idx, field, value);
+    setActiveAlert(null);
+  };
+
   const selectFromHistory = (idx: number, h: HistoryItem) => {
+    if (!items[idx]) return;
     const newItems = [...items];
-    if (!newItems[idx]) return;
     newItems[idx] = { 
       ...newItems[idx], 
       description: h.description, 
@@ -329,14 +342,14 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   <div className="text-slate-200 group-hover:text-[#004071] transition-colors"><Search className="w-3 h-3" /></div>
                   <input 
                     type="text" 
-                    value={item.description} 
+                    value={item.description || ''} 
                     onChange={e => { 
-                      updateItem(idx, 'description', e.target.value); 
-                      if (e.target.value.length > 0) {
-                        setShowHistoryForIdx(idx); 
-                      } else {
-                        setShowHistoryForIdx(null);
-                      }
+                        updateItem(idx, 'description', e.target.value);
+                        if (e.target.value.length > 0) {
+                            setShowHistoryForIdx(idx); 
+                        } else {
+                            setShowHistoryForIdx(null);
+                        }
                     }} 
                     onFocus={() => (item.description && item.description.length > 0) && setShowHistoryForIdx(idx)}
                     onBlur={() => handleBlurItem(idx)}
@@ -349,7 +362,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2">Sugerencias (Biblioteca + Historial)</div>
                     {filteredHistory.map((h, hIdx) => (
                       <button 
-                        key={hIdx} 
+                        key={`${h.description}-${hIdx}`} 
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => selectFromHistory(idx, h)} 
                         className="w-full text-left px-4 py-3 rounded-xl flex justify-between items-center hover:bg-[#004071] hover:text-white transition-all"
@@ -371,7 +384,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   </div>
                 )}
               </td>
-              <td><input type="text" value={formatUnit(item.unit)} onChange={e => updateItem(idx, 'unit', e.target.value)} onBlur={() => handleBlurItem(idx)} className="w-full text-center bg-transparent border-none focus:ring-0 text-xs font-bold text-slate-400 uppercase transition-colors" /></td>
+              <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} onBlur={() => handleBlurItem(idx)} className="w-full text-center bg-transparent border-none focus:ring-0 text-xs font-bold text-slate-400 uppercase transition-colors" /></td>
               <td className="relative px-2">
                 <div className="flex items-center justify-end gap-1">
                   <button onClick={() => handleAiFieldSuggestion(item, 'performance')} className={`p-1.5 rounded-lg transition-all ${isAiLoadingField === `${item.id}-performance` ? 'bg-slate-100' : 'bg-[#D9E021]/10 text-[#88C13E] hover:bg-[#88C13E] hover:text-white'}`}>
@@ -421,7 +434,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                <div className="flex flex-col">
                   <span className="text-[8px] font-bold text-slate-400 uppercase">{activeAlert.isAiSuggestion ? 'Sugerido' : 'Promedio Histórico'}</span>
                   <span className="text-sm font-black text-[#004071] font-mono">
-                    {activeAlert.field === 'unitPrice' ? formatCLP(activeAlert.avgValue) : activeAlert.avgValue.toFixed(3)}
+                    {activeAlert.field === 'unitPrice' ? formatCurrency(activeAlert.avgValue) : (activeAlert.avgValue || 0).toFixed(3)}
                   </span>
                </div>
                <button 
