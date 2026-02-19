@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Plus, X, ChevronRight, BookOpen, Trash2, Upload, Share2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -58,7 +57,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
     const activeProject = projects.find(p => p.id === currentProjectId);
 
-    // Estado para el modal de confirmación
     const [confirmDelete, setConfirmDelete] = useState<{
         type: 'project' | 'chapter' | 'apu';
         id: string;
@@ -84,10 +82,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     return (
         <aside className={cn(
-            "bg-white border-r border-slate-200 transition-all duration-300 flex flex-col shadow-2xl z-20 h-screen",
-            isOpen ? 'w-80' : 'w-0 overflow-hidden'
+            "bg-white border-r border-slate-200 transition-all duration-300 flex flex-col shadow-2xl z-20 h-screen overflow-hidden",
+            isOpen ? 'w-80' : 'w-0 border-none'
         )}>
-            <div className="p-6 border-b flex items-center justify-between bg-white sticky top-0 z-10">
+            <div className="p-6 border-b flex items-center justify-between bg-white sticky top-0 z-10 whitespace-nowrap">
                 <div className="flex items-center gap-3">
                     <HidrogestionCorporateLogo size="w-9 h-9" />
                     <div className="flex flex-col leading-none">
@@ -95,10 +93,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Gestión de Costos</span>
                     </div>
                 </div>
-                <button onClick={() => setIsOpen(false)} className="lg:hidden p-2 text-[#004071]"><X className="w-5 h-5" /></button>
+                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071]">
+                    <X className="w-5 h-5" />
+                </button>
             </div>
 
-            <div className="p-4 grid grid-cols-2 gap-3">
+            <div className="p-4 grid grid-cols-2 gap-3 min-w-[20rem]">
                 <button onClick={onNewProject} className="col-span-2 flex items-center justify-center gap-2 bg-[#004071] hover:bg-[#002D50] text-white font-black py-4 rounded-2xl shadow-xl transition-all uppercase tracking-widest text-[9px]">
                     <Plus className="w-4 h-4" /> Nuevo Proyecto
                 </button>
@@ -115,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 pb-10 space-y-4 no-scrollbar relative text-slate-600">
+            <div className="flex-1 overflow-y-auto px-4 pb-10 space-y-4 no-scrollbar relative text-slate-600 min-w-[20rem]">
                 <div className="text-[8px] font-black uppercase text-slate-400 tracking-[0.2em] px-2 mb-2">Biblioteca de Proyectos</div>
                 {projects.map(project => (
                     <div key={project.id} className="group/project space-y-1">
@@ -213,13 +213,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ))}
             </div>
 
-            {/* Modal de confirmación único */}
             <ConfirmationModal
                 isOpen={!!confirmDelete}
                 onClose={() => setConfirmDelete(null)}
                 onConfirm={handleConfirmAction}
                 itemName={confirmDelete?.name || ""}
-                message={`Desea eliminar definitivamente: `}
+                message={`¿Desea eliminar definitivamente?`}
             />
         </aside>
     );

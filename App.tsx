@@ -1,6 +1,5 @@
-
-import React, { useState, useMemo } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Menu, Save, Loader2, Download, Check, Clock, Database } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
@@ -32,6 +31,21 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Lógica de Autoguardado cada 60 segundos
+  useEffect(() => {
+    if (!activeProjectId) return;
+
+    const timer = setInterval(() => {
+      const result = saveActiveProject();
+      if (result) {
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      }
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [activeProjectId, chapters, apus, projects, saveActiveProject]);
+
   const renumberApus = (allApus: APU[], allChapters: Chapter[]) => {
     return allApus.map(apu => {
       const chapter = allChapters.find(c => c.id === apu.chapterId);
@@ -55,7 +69,6 @@ const App: React.FC = () => {
 
   const handleManualSave = () => {
     setSaveStatus('saving');
-    // Simular un pequeño delay para feedback visual
     setTimeout(() => {
       const result = saveActiveProject();
       if (result) {
@@ -111,11 +124,9 @@ const App: React.FC = () => {
           return { ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId };
         });
 
-        // Guardar físicamente
         const physicalData = { metadata: newProject, chapters: newChapters, apus: newApus };
         localStorage.setItem(`apu_engine_project_${newProjectId}`, JSON.stringify(physicalData));
         
-        // Actualizar biblioteca
         setProjects([newProject, ...projects]);
         loadProject(newProjectId);
         toast.success(`Proyecto "${newProject.name}" importado con éxito`);
@@ -138,7 +149,6 @@ const App: React.FC = () => {
       const timestamp = Date.now();
       const newProject: Project = { ...data, id: newId, createdAt: timestamp, updatedAt: timestamp };
       
-      // Guardar inicial vacío
       const physicalData = { metadata: newProject, chapters: [], apus: [] };
       localStorage.setItem(`apu_engine_project_${newId}`, JSON.stringify(physicalData));
       
@@ -224,15 +234,16 @@ const App: React.FC = () => {
         onDeleteApu={(id) => {
           deleteApu(id);
           if (currentApuId === id) setCurrentApuId(null);
-          toast.info('Partida eliminada');
         }}
         onShareProject={handleShareProject}
         handleImport={handleImport}
         onDeleteProject={(id) => {
-          if (window.confirm('¿Está seguro de eliminar este proyecto y todos sus datos permanentemente?')) {
-            deleteProject(id);
-            toast.error('Proyecto eliminado de la biblioteca física');
+          deleteProject(id);
+          if (activeProjectId === id) {
+            setActiveProjectId(null);
+            setCurrentApuId(null);
           }
+          toast.error('Proyecto eliminado de la biblioteca');
         }}
         onDuplicateProject={(id) => {
           const newId = duplicateProject(id);
@@ -245,14 +256,20 @@ const App: React.FC = () => {
           <>
             <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
-                {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071]"><Menu className="w-5 h-5" /></button>}
+                <button 
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                  className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"
+                  title={isSidebarOpen ? "Cerrar menú" : "Abrir menú"}
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
                 <div>
                   <h2 className="text-lg font-black text-[#004071] tracking-tight uppercase truncate max-w-md">{activeApu?.name || activeProject.name}</h2>
                   <div className="flex items-center gap-3 mt-0.5">
                     <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name} • {activeProject.code}</p>
                     {lastSaved && (
                       <span className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">
-                        <Clock className="w-2.5 h-2.5" /> Último guardado: {new Date(lastSaved).toLocaleString()}
+                        <Clock className="w-2.5 h-2.5" /> {new Date(lastSaved).toLocaleTimeString()}
                       </span>
                     )}
                   </div>
@@ -265,13 +282,13 @@ const App: React.FC = () => {
                   className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all uppercase tracking-widest disabled:opacity-50"
                 >
                   {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />} 
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar Cambios'}
+                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
                 </button>
                 <button 
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
                   className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg hover:bg-green-700 transition-all uppercase tracking-widest"
                 >
-                  <Download className="w-3 h-3" /> Reporte Excel
+                  <Download className="w-3 h-3" /> Excel
                 </button>
               </div>
             </header>
@@ -298,6 +315,15 @@ const App: React.FC = () => {
           </>
         ) : (
           <div className="flex flex-col items-center justify-center min-h-screen text-center max-w-xl mx-auto space-y-12 animate-in fade-in duration-500">
+             {/* Botón de menú para abrir sidebar cuando no hay proyecto seleccionado */}
+             {!isSidebarOpen && (
+              <button 
+                onClick={() => setIsSidebarOpen(true)} 
+                className="fixed top-4 left-4 p-3 bg-white shadow-lg rounded-xl text-[#004071] hover:scale-105 transition-all z-50 border border-slate-100"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+            )}
             <div className="flex items-center justify-center">
               <svg viewBox="0 0 100 100" className="w-40 h-40 shadow-inner rounded-full">
                 <circle cx="50" cy="50" r="48" fill="white" />
