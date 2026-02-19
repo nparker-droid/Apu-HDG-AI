@@ -1,12 +1,14 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { Menu, Save, Loader2, Download, Check, Clock, Database } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
 import ProjectModal from './components/ProjectModal';
 import ChapterModal from './components/ChapterModal';
 import LibraryModal from './components/LibraryModal';
-import { exportSingleApuPDF } from './services/exportService';
+import ProjectGeneralView from './components/ProjectGeneralView';
+import { exportSingleApuPDF, exportProjectToPDF, exportBudgetToPDF } from './services/exportService';
 import { exportProjectToExcel } from './services/excelExportService';
 import { Project, APU, Chapter, ItemCategory } from './types';
 import { Toaster, toast } from 'sonner';
@@ -36,12 +38,13 @@ const App: React.FC = () => {
     if (!activeProjectId) return;
 
     const timer = setInterval(() => {
+      console.log("Ejecutando autoguardado...");
       const result = saveActiveProject();
       if (result) {
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       }
-    }, 60000);
+    }, 60000); // 60000 ms = 1 minuto
 
     return () => clearInterval(timer);
   }, [activeProjectId, chapters, apus, projects, saveActiveProject]);
@@ -69,6 +72,7 @@ const App: React.FC = () => {
 
   const handleManualSave = () => {
     setSaveStatus('saving');
+    // Simular un pequeño delay para feedback visual
     setTimeout(() => {
       const result = saveActiveProject();
       if (result) {
@@ -124,6 +128,7 @@ const App: React.FC = () => {
           return { ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId };
         });
 
+        // Guardar físicamente
         const physicalData = { metadata: newProject, chapters: newChapters, apus: newApus };
         localStorage.setItem(`apu_engine_project_${newProjectId}`, JSON.stringify(physicalData));
         
@@ -149,6 +154,7 @@ const App: React.FC = () => {
       const timestamp = Date.now();
       const newProject: Project = { ...data, id: newId, createdAt: timestamp, updatedAt: timestamp };
       
+      // Guardar inicial vacío
       const physicalData = { metadata: newProject, chapters: [], apus: [] };
       localStorage.setItem(`apu_engine_project_${newId}`, JSON.stringify(physicalData));
       
@@ -220,7 +226,10 @@ const App: React.FC = () => {
         deleteChapter={deleteChapter}
         currentProjectId={activeProjectId}
         setCurrentProjectId={(id) => {
-          if (id) loadProject(id);
+          if (id) {
+            loadProject(id);
+            setCurrentApuId(null); // Navega a la vista General al seleccionar proyecto
+          }
           else setActiveProjectId(null);
         }}
         currentApuId={currentApuId}
@@ -234,6 +243,7 @@ const App: React.FC = () => {
         onDeleteApu={(id) => {
           deleteApu(id);
           if (currentApuId === id) setCurrentApuId(null);
+          toast.info('Partida eliminada');
         }}
         onShareProject={handleShareProject}
         handleImport={handleImport}
@@ -256,20 +266,23 @@ const App: React.FC = () => {
           <>
             <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
-                <button 
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-                  className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"
-                  title={isSidebarOpen ? "Cerrar menú" : "Abrir menú"}
-                >
-                  <Menu className="w-5 h-5" />
-                </button>
+                {!isSidebarOpen && (
+                  <button 
+                    onClick={() => setIsSidebarOpen(true)} 
+                    className="p-2 hover:bg-slate-100 rounded-lg text-[#004071]"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                )}
                 <div>
-                  <h2 className="text-lg font-black text-[#004071] tracking-tight uppercase truncate max-w-md">{activeApu?.name || activeProject.name}</h2>
+                  <h2 className="text-lg font-black text-[#004071] tracking-tight uppercase truncate max-w-md">
+                    {activeApu ? activeApu.name : `VISTA GENERAL: ${activeProject.name}`}
+                  </h2>
                   <div className="flex items-center gap-3 mt-0.5">
                     <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name} • {activeProject.code}</p>
                     {lastSaved && (
                       <span className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">
-                        <Clock className="w-2.5 h-2.5" /> {new Date(lastSaved).toLocaleTimeString()}
+                        <Clock className="w-2.5 h-2.5" /> Último guardado: {new Date(lastSaved).toLocaleString()}
                       </span>
                     )}
                   </div>
@@ -282,13 +295,13 @@ const App: React.FC = () => {
                   className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all uppercase tracking-widest disabled:opacity-50"
                 >
                   {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />} 
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar Cambios'}
                 </button>
                 <button 
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
                   className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg hover:bg-green-700 transition-all uppercase tracking-widest"
                 >
-                  <Download className="w-3 h-3" /> Excel
+                  <Download className="w-3 h-3" /> Reporte Excel
                 </button>
               </div>
             </header>
@@ -303,19 +316,16 @@ const App: React.FC = () => {
                   onRegisterResource={addHistoryItem}
                 />
               ) : (
-                <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-md mx-auto space-y-6">
-                  <div className="p-6 bg-white rounded-3xl shadow-xl border border-slate-100">
-                    <Database className="w-12 h-12 text-[#004071] mx-auto mb-4" />
-                    <h3 className="text-xl font-black text-[#004071] uppercase tracking-tighter">Explorador de Proyecto</h3>
-                    <p className="text-slate-500 text-sm mt-2">Selecciona una partida en el panel lateral para comenzar el análisis o crea un nuevo capítulo para organizar tu presupuesto.</p>
-                  </div>
-                </div>
+                <ProjectGeneralView 
+                  project={activeProject}
+                  chapters={chapters}
+                  apus={apus}
+                />
               )}
             </div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center min-h-screen text-center max-w-xl mx-auto space-y-12 animate-in fade-in duration-500">
-             {/* Botón de menú para abrir sidebar cuando no hay proyecto seleccionado */}
              {!isSidebarOpen && (
               <button 
                 onClick={() => setIsSidebarOpen(true)} 
