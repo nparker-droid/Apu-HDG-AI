@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
@@ -33,37 +32,72 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Lógica de renumeración automática
+  const applyAutoRenumbering = (allChapters: Chapter[], allApus: APU[]) => {
+    // 1. Renumerar Capítulos por su orden actual en el array del proyecto activo
+    const updatedChapters = allChapters.map((ch) => {
+      const projectChaps = allChapters.filter(c => c.projectId === ch.projectId);
+      const index = projectChaps.findIndex(c => c.id === ch.id);
+      return { ...ch, code: (index + 1).toString() };
+    });
+
+    // 2. Renumerar APUs basado en los nuevos códigos de capítulo
+    const updatedApus = allApus.map(apu => {
+      const chapter = updatedChapters.find(c => c.id === apu.chapterId);
+      if (!chapter) return apu;
+      
+      const chapterApus = allApus
+        .filter(a => a.chapterId === apu.chapterId)
+        .sort((a, b) => a.createdAt - b.createdAt);
+      
+      const index = chapterApus.findIndex(a => a.id === apu.id);
+      return { ...apu, code: `${chapter.code}.${index + 1}` };
+    });
+
+    setChapters(updatedChapters);
+    setApus(updatedApus);
+  };
+
+  // Efecto para reaccionar a cambios en la estructura de capítulos o apus
+  useEffect(() => {
+    if (activeProjectId) {
+      applyAutoRenumbering(chapters, apus);
+    }
+  }, [chapters.length, apus.length, activeProjectId]);
+
+  // REFERENCIAS PARA EL AUTOGUARDADO (Para evitar reinicios constantes del timer al escribir)
+  const saveRef = useRef(saveActiveProject);
+  useEffect(() => {
+    saveRef.current = saveActiveProject;
+  }, [saveActiveProject]);
+
   // Lógica de Autoguardado cada 60 segundos
   useEffect(() => {
     if (!activeProjectId) return;
 
     const timer = setInterval(() => {
-      console.log("Ejecutando autoguardado...");
-      const result = saveActiveProject();
+      const result = saveRef.current(); 
       if (result) {
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       }
-    }, 60000); // 60000 ms = 1 minuto
+    }, 60000); 
 
     return () => clearInterval(timer);
-  }, [activeProjectId, chapters, apus, projects, saveActiveProject]);
-
-  const renumberApus = (allApus: APU[], allChapters: Chapter[]) => {
-    return allApus.map(apu => {
-      const chapter = allChapters.find(c => c.id === apu.chapterId);
-      if (!chapter) return apu;
-      const chapterApus = allApus
-        .filter(a => a.chapterId === apu.chapterId)
-        .sort((a, b) => a.createdAt - b.createdAt);
-      const index = chapterApus.findIndex(a => a.id === apu.id);
-      return { ...apu, code: `${chapter.code}.${index + 1}` };
-    });
-  };
+  }, [activeProjectId]);
 
   const activeProject = useMemo(() => projects.find(p => p.id === activeProjectId), [projects, activeProjectId]);
-  const activeApu = useMemo(() => apus.find(a => a.id === currentApuId), [apus, currentApuId]);
-  const activeChapter = useMemo(() => chapters.find(c => c.id === activeApu?.chapterId), [chapters, activeApu]);
+  
+  // Verificación segura de la APU activa
+  const activeApu = useMemo(() => {
+    if (!currentApuId) return null;
+    return apus.find(a => a.id === currentApuId) || null;
+  }, [apus, currentApuId]);
+
+  const activeChapter = useMemo(() => {
+    if (!activeApu) return null;
+    return chapters.find(c => c.id === activeApu.chapterId) || null;
+  }, [chapters, activeApu]);
 
   const currentProjectApus = useMemo(() => {
     if (!activeProjectId) return [];
@@ -72,14 +106,13 @@ const App: React.FC = () => {
 
   const handleManualSave = () => {
     setSaveStatus('saving');
-    // Simular un pequeño delay para feedback visual
     setTimeout(() => {
       const result = saveActiveProject();
       if (result) {
         setSaveStatus('saved');
         const time = new Date(result).toLocaleTimeString();
-        toast.success(`Proyecto guardado en Local Storage a las ${time}`, {
-          description: 'Los datos están persistidos en el almacenamiento del navegador.',
+        toast.success(`Proyecto guardado a las ${time}`, {
+          description: 'Los datos están persistidos en el almacenamiento local.',
         });
         setTimeout(() => setSaveStatus('idle'), 2000);
       } else {
@@ -128,7 +161,6 @@ const App: React.FC = () => {
           return { ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId };
         });
 
-        // Guardar físicamente
         const physicalData = { metadata: newProject, chapters: newChapters, apus: newApus };
         localStorage.setItem(`apu_engine_project_${newProjectId}`, JSON.stringify(physicalData));
         
@@ -154,27 +186,28 @@ const App: React.FC = () => {
       const timestamp = Date.now();
       const newProject: Project = { ...data, id: newId, createdAt: timestamp, updatedAt: timestamp };
       
-      // Guardar inicial vacío
       const physicalData = { metadata: newProject, chapters: [], apus: [] };
       localStorage.setItem(`apu_engine_project_${newId}`, JSON.stringify(physicalData));
       
       setProjects([newProject, ...projects]);
       loadProject(newId);
-      toast.success('Nuevo proyecto creado en la biblioteca');
+      setCurrentApuId(null);
+      toast.success('Nuevo proyecto creado');
     }
     setIsProjectModalOpen(false);
   };
 
   const handleCreateChapter = (name: string) => {
     if (!activeProjectId) return;
-    const projectChapters = chapters.filter(c => c.projectId === activeProjectId);
     const newChapter = {
       id: safeUUID(),
       projectId: activeProjectId,
-      code: (projectChapters.length + 1).toString(),
+      code: '', 
       name: name
     };
-    addChapter(newChapter);
+    const nextChapters = [...chapters, newChapter];
+    setChapters(nextChapters);
+    applyAutoRenumbering(nextChapters, apus);
     setChapterModalProjectId(null);
   };
 
@@ -183,7 +216,7 @@ const App: React.FC = () => {
     const newApu: APU = {
       id: safeUUID(), projectId, chapterId,
       code: '', 
-      name: baseApu?.name || '', 
+      name: baseApu?.name || 'Nueva Partida', 
       unit: baseApu?.unit || 'GL', 
       quantity: 1,
       items: baseApu?.items ? JSON.parse(JSON.stringify(baseApu.items)) : { 
@@ -199,36 +232,47 @@ const App: React.FC = () => {
       createdAt: Date.now(),
     };
 
-    const updatedApus = renumberApus([...apus, newApu], chapters);
+    const updatedApus = [...apus, newApu];
     setApus(updatedApus);
+    applyAutoRenumbering(chapters, updatedApus);
     setCurrentApuId(newApu.id);
     setLibraryChapterId(null);
-    toast.success('Nueva partida añadida al capítulo');
+    toast.success('Nueva partida añadida');
   };
 
   const handleDuplicateApu = (apu: APU) => {
     const duplicated: APU = { ...JSON.parse(JSON.stringify(apu)), id: safeUUID(), createdAt: Date.now() };
-    const updated = renumberApus([...apus, duplicated], chapters);
+    const updated = [...apus, duplicated];
     setApus(updated);
+    applyAutoRenumbering(chapters, updated);
     toast.info('Partida duplicada');
   };
 
   return (
     <div className="flex h-screen bg-[#F1F5F9] overflow-hidden text-slate-800 font-sans">
       <Toaster position="top-right" theme="light" expand={false} richColors />
+      
       <Sidebar
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
         projects={projects}
         chapters={chapters}
         apus={apus}
-        moveChapter={moveChapter}
-        deleteChapter={deleteChapter}
+        moveChapter={(id, dir) => {
+          moveChapter(id, dir);
+          // Forzar renumeración tras mover
+          setTimeout(() => applyAutoRenumbering(chapters, apus), 50);
+        }}
+        deleteChapter={(id) => {
+          deleteChapter(id);
+          // Forzar renumeración tras borrar
+          setTimeout(() => applyAutoRenumbering(chapters, apus), 50);
+        }}
         currentProjectId={activeProjectId}
         setCurrentProjectId={(id) => {
           if (id) {
             loadProject(id);
-            setCurrentApuId(null); // Navega a la vista General al seleccionar proyecto
+            setCurrentApuId(null);
           }
           else setActiveProjectId(null);
         }}
@@ -243,7 +287,7 @@ const App: React.FC = () => {
         onDeleteApu={(id) => {
           deleteApu(id);
           if (currentApuId === id) setCurrentApuId(null);
-          toast.info('Partida eliminada');
+          toast.error('Partida eliminada');
         }}
         onShareProject={handleShareProject}
         handleImport={handleImport}
@@ -253,7 +297,7 @@ const App: React.FC = () => {
             setActiveProjectId(null);
             setCurrentApuId(null);
           }
-          toast.error('Proyecto eliminado de la biblioteca');
+          toast.error('Proyecto eliminado');
         }}
         onDuplicateProject={(id) => {
           const newId = duplicateProject(id);
@@ -295,7 +339,7 @@ const App: React.FC = () => {
                   className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all uppercase tracking-widest disabled:opacity-50"
                 >
                   {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />} 
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar Cambios'}
+                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
                 </button>
                 <button 
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}

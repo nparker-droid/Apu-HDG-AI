@@ -1,10 +1,8 @@
-
 import React, { useState } from 'react';
-import { Sparkles, Users, Box, HardHat, ShieldCheck, Landmark, Hash, Globe, Lock, Settings2, CheckCircle2, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
+import { Sparkles, Users, Box, HardHat, Globe, Hash, Settings2, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { APU, Project, Chapter, ItemCategory, APUItem, HistoryItem } from '../types';
 import { getApuSuggestions } from '../services/geminiService';
 import SectionTable from './SectionTable';
-import { formatUnit } from '../services/exportService';
 import { exportSingleApuToExcel } from '../services/excelExportService';
 
 const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
@@ -46,8 +44,10 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
   const subEq = calculateSubtotal(ItemCategory.EQUIPO);
   const subOt = calculateSubtotal(ItemCategory.OTROS);
 
-  const costoDirecto = subMat + subMoTotal + subEq + subOt;
-  const precioUnitarioNeto = costoDirecto * (1 + (overhead + utility) / 100);
+  // Cálculos solicitados
+  const costoDirectoUnitario = subMat + subMoTotal + subEq + subOt;
+  const costoNetoUnitario = costoDirectoUnitario * (1 + (overhead + utility) / 100);
+  const totalPartidaConIva = (costoNetoUnitario * apu.quantity) * 1.19;
 
   const handleAiSuggest = async () => {
     if (!apu.name) return alert('Ingresa nombre de partida.');
@@ -61,36 +61,40 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-32">
-      {/* HEADER DE TOTALES */}
-      <div className="bg-[#004071] text-white rounded-[2rem] p-8 shadow-2xl flex flex-wrap gap-8 items-center relative overflow-hidden border border-transparent transition-colors">
+      {/* HEADER DE TOTALES MEJORADO */}
+      <div className="bg-[#004071] text-white rounded-[2rem] p-8 shadow-2xl flex flex-wrap gap-8 items-center relative overflow-hidden border border-transparent">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
-        <div className="flex flex-col relative z-10">
-           <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Partida (Con IVA)</p>
-           <p className="text-3xl font-black text-[#D9E021] font-mono">{formatCLP(precioUnitarioNeto * apu.quantity * 1.19)}</p>
-        </div>
-        <div className="flex flex-col ml-auto relative z-10 text-right">
-           <div className="flex items-center gap-3 justify-end mb-2">
-             <button 
-                onClick={() => exportSingleApuToExcel(project, apu)}
-                className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-xl transition-all shadow-lg flex items-center gap-2 text-[8px] font-black uppercase tracking-widest"
-             >
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-8 relative z-10">
+          <div>
+            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Costo Directo Unitario</p>
+            <p className="text-2xl font-black text-white font-mono">{formatCLP(costoDirectoUnitario)}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Costo Neto Unitario (+GG/Ut)</p>
+            <p className="text-2xl font-black text-[#88C13E] font-mono">{formatCLP(costoNetoUnitario)}</p>
+          </div>
+          <div className="md:text-right">
+            <div className="flex items-center gap-3 md:justify-end mb-2">
+              <button onClick={() => exportSingleApuToExcel(project, apu)} className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-xl transition-all shadow-lg flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
                 <FileSpreadsheet className="w-3 h-3" /> Excel APU
-             </button>
-           </div>
-           <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">P. Unitario Neto</p>
-           <p className="text-2xl font-black text-[#88C13E] font-mono">{formatCLP(precioUnitarioNeto)}</p>
+              </button>
+            </div>
+            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Partida (Cant. x Neto + IVA)</p>
+            <p className="text-3xl font-black text-[#D9E021] font-mono">{formatCLP(totalPartidaConIva)}</p>
+          </div>
         </div>
       </div>
 
-      {/* RESUMEN DE COSTOS POR CATEGORÍA */}
+      {/* RESUMEN DE COSTOS DIRECTOS POR CATEGORÍA */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Materiales', val: subMat, icon: <Box className="w-3 h-3"/>, color: 'text-blue-500' },
-          { label: 'Mano de Obra', val: subMoTotal, icon: <Users className="w-3 h-3"/>, color: 'text-orange-500' },
-          { label: 'Equipos', val: subEq, icon: <HardHat className="w-3 h-3"/>, color: 'text-yellow-500' },
-          { label: 'Otros', val: subOt, icon: <Globe className="w-3 h-3"/>, color: 'text-indigo-500' }
+          { label: 'C. Directo Materiales', val: subMat, icon: <Box className="w-3 h-3"/>, color: 'text-blue-500' },
+          { label: 'C. Directo M. de Obra', val: subMoTotal, icon: <Users className="w-3 h-3"/>, color: 'text-orange-500' },
+          { label: 'C. Directo Equipos', val: subEq, icon: <HardHat className="w-3 h-3"/>, color: 'text-yellow-500' },
+          { label: 'C. Directo Otros', val: subOt, icon: <Globe className="w-3 h-3"/>, color: 'text-indigo-500' }
         ].map(item => (
-          <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-colors">
+          <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
              <div className="flex items-center gap-2 mb-1">
                 <span className={item.color}>{item.icon}</span>
                 <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{item.label}</span>
@@ -100,74 +104,67 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
         ))}
       </div>
 
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 space-y-8 transition-colors">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 space-y-8">
         {/* IDENTIFICACIÓN PARTIDA */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-2 space-y-2">
              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Hash className="w-3 h-3"/> Ítem</label>
-             <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-[#004071] transition-colors" />
+             <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-[#004071]" />
           </div>
           <div className="lg:col-span-6 space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Descripción Técnica</label>
             <div className="relative group">
-              <input type="text" value={apu.name} onChange={e => handleChange('name', e.target.value)} placeholder="Partida..." className="w-full text-xl font-black bg-slate-50 border-none rounded-xl px-6 py-3 transition-colors text-slate-800" />
-              <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#004071] hover:bg-[#002D50] text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-black uppercase tracking-widest transition-all">
+              <input type="text" value={apu.name} onChange={e => handleChange('name', e.target.value)} placeholder="Partida..." className="w-full text-xl font-black bg-slate-50 border-none rounded-xl px-6 py-3 text-slate-800" />
+              <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#004071] hover:bg-[#002D50] text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
                 {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3 text-[#D9E021]" />} Analizar IA
               </button>
             </div>
           </div>
           <div className="lg:col-span-4 grid grid-cols-2 gap-4">
-             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={formatUnit(apu.unit)} onChange={e => handleChange('unit', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600 transition-colors" /></div>
-             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="number" step="0.001" value={apu.quantity} onChange={e => handleChange('quantity', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] transition-colors" /></div>
+             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600" /></div>
+             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="number" step="0.001" value={apu.quantity} onChange={e => handleChange('quantity', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E]" /></div>
           </div>
         </div>
 
-        {/* SECCIÓN CONFIGURACIÓN COSTOS INDIRECTOS (DISCRETA) */}
-        <div className="border-t border-slate-100 pt-4 transition-colors">
-          <button 
-            onClick={() => setShowConfig(!showConfig)}
-            className="flex items-center gap-2 text-[9px] font-black text-slate-400 hover:text-[#004071] transition-colors uppercase tracking-widest"
-          >
+        {/* SECCIÓN CONFIGURACIÓN COSTOS INDIRECTOS */}
+        <div className="border-t border-slate-100 pt-4">
+          <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[9px] font-black text-slate-400 hover:text-[#004071] uppercase tracking-widest">
             <Settings2 className="w-3 h-3" /> Configuración de Costos Indirectos {showConfig ? <ChevronUp className="w-3 h-3"/> : <ChevronDown className="w-3 h-3"/>}
           </button>
-
           {showConfig && (
-            <div className="mt-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-6 animate-in slide-in-from-top-2 duration-200 transition-colors">
+            <div className="mt-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-6 animate-in slide-in-from-top-2">
                <div className="flex flex-col gap-2">
                  <span className="text-[8px] font-black text-slate-400 uppercase">Origen de Tasas</span>
-                 <button 
-                   onClick={() => onUpdate({...apu, useProjectGlobalRates: !apu.useProjectGlobalRates})}
-                   className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all ${apu.useProjectGlobalRates ? 'bg-[#88C13E] text-white shadow-md' : 'bg-slate-200 text-slate-500'}`}
-                 >
+                 <button onClick={() => onUpdate({...apu, useProjectGlobalRates: !apu.useProjectGlobalRates})} className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all ${apu.useProjectGlobalRates ? 'bg-[#88C13E] text-white shadow-md' : 'bg-slate-200 text-slate-500'}`}>
                    {apu.useProjectGlobalRates ? 'Valores del Proyecto' : 'Personalizado'}
                  </button>
                </div>
                <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                  <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Leyes Soc. (%)</label>
-                 <input type="number" step="0.1" value={laws} onChange={e => handleChange('socialLawsPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071] transition-colors" />
+                 <input type="number" step="0.1" value={laws} onChange={e => handleChange('socialLawsPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
                </div>
                <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                  <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">GG (%)</label>
-                 <input type="number" step="0.1" value={overhead} onChange={e => handleChange('overheadPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071] transition-colors" />
+                 <input type="number" step="0.1" value={overhead} onChange={e => handleChange('overheadPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
                </div>
                <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                  <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Utilidad (%)</label>
-                 <input type="number" step="0.1" value={utility} onChange={e => handleChange('utilityPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071] transition-colors" />
+                 <input type="number" step="0.1" value={utility} onChange={e => handleChange('utilityPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
                </div>
             </div>
           )}
         </div>
 
         {/* TABLA DE RECURSOS */}
-        <div className="border-t border-slate-100 pt-6 transition-colors">
+        <div className="border-t border-slate-100 pt-6">
           <div className="flex items-center justify-between mb-6">
-             <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl transition-colors">
+             <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl">
                {[ItemCategory.MATERIAL, ItemCategory.MANO_DE_OBRA, ItemCategory.EQUIPO, ItemCategory.OTROS].map((cat) => (
                  <button key={cat} onClick={() => setActiveTab(cat)} className={`px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === cat ? 'bg-[#004071] text-white shadow-md' : 'text-slate-400 hover:bg-slate-100'}`}>{cat}</button>
                ))}
              </div>
              <div className="text-right">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Subtotal {activeTab}: </span>
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Costo Directo {activeTab}: </span>
                 <span className="text-xs font-black text-[#004071] font-mono ml-2">{formatCLP(calculateSubtotal(activeTab))}</span>
              </div>
           </div>
