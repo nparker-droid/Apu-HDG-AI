@@ -43,13 +43,13 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(val));
   };
 
-  // FORMATEADOR ACTUALIZADO: 1 decimal exacto
+  // REDONDEO A 1 DECIMAL
   const formatQuantity = (val: number) => {
     return new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-800">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center gap-3 mb-2 text-slate-400">
@@ -106,7 +106,6 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                       <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">{apu.code}</td>
                       <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
                       <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
-                      {/* CANTIDAD CON 1 DECIMAL */}
                       <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
                       <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(apu.unitarioNeto)}</td>
                       <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(apu.subtotal)}</td>

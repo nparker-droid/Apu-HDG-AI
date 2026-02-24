@@ -67,44 +67,32 @@ export const useAppStore = () => {
     });
   }, [activeProjectId]);
 
-  // NUEVA FUNCIÓN: Mover APUs (Subpartidas)
+  // LOGICA PARA MOVER SUBPARTIDAS
   const moveApu = useCallback((apuId: string, direction: 'up' | 'down') => {
     setApus(prev => {
       const apuToMove = prev.find(a => a.id === apuId);
       if (!apuToMove) return prev;
-      const chapterApus = prev.filter(a => a.chapterId === apuToMove.chapterId).sort((a, b) => a.createdAt - b.createdAt);
+      
+      const chapterApus = prev
+        .filter(a => a.chapterId === apuToMove.chapterId)
+        .sort((a, b) => a.createdAt - b.createdAt);
+
       const currentIndex = chapterApus.findIndex(a => a.id === apuId);
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
       if (targetIndex < 0 || targetIndex >= chapterApus.length) return prev;
-      
+
       const newApus = [...prev];
       const itemA = newApus.find(a => a.id === apuId)!;
       const itemB = newApus.find(a => a.id === chapterApus[targetIndex].id)!;
+      
       const tempDate = itemA.createdAt;
       itemA.createdAt = itemB.createdAt;
       itemB.createdAt = tempDate;
+
       return [...newApus];
     });
   }, []);
-
-  const deleteProject = useCallback((id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    localStorage.removeItem(`${PROJECT_PREFIX}${id}`);
-  }, []);
-
-  const duplicateProject = useCallback((id: string) => {
-    const sourceProject = projects.find(p => p.id === id);
-    if (!sourceProject) return;
-    const sourceDataRaw = localStorage.getItem(`${PROJECT_PREFIX}${id}`);
-    if (!sourceDataRaw) return;
-    const sourceData = JSON.parse(sourceDataRaw);
-    const newId = crypto.randomUUID();
-    const timestamp = Date.now();
-    const newMetadata = { ...sourceProject, id: newId, name: `${sourceProject.name} (Copia)`, createdAt: timestamp, updatedAt: timestamp };
-    setProjects(prev => [newMetadata, ...prev]);
-    localStorage.setItem(`${PROJECT_PREFIX}${newId}`, JSON.stringify({ ...sourceData, metadata: newMetadata }));
-    return newId;
-  }, [projects]);
 
   return {
     projects, setProjects, chapters, setChapters, addChapter: (c: Chapter) => setChapters(prev => [...prev, c]),

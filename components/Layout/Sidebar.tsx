@@ -35,9 +35,8 @@ const Sidebar: React.FC<SidebarProps> = (props) => {
   const {
     isOpen, projects, chapters, apus, moveChapter, moveApu, deleteChapter,
     currentProjectId, setCurrentProjectId, currentApuId, setCurrentApuId,
-    onNewProject, onEditProject, onNewChapter, onLibraryOpen, onCreateApu,
-    onDuplicateApu, onDeleteApu, onShareProject, handleImport,
-    onDeleteProject, onDuplicateProject
+    onNewProject, onEditProject, onNewChapter, onCreateApu,
+    onDeleteApu, onDeleteProject
   } = props;
 
   return (
@@ -82,9 +81,10 @@ const Sidebar: React.FC<SidebarProps> = (props) => {
                         <span className="text-[10px] font-bold uppercase truncate text-slate-300">{chapter.name}</span>
                       </div>
                       <div className="flex items-center opacity-0 group-hover:opacity-100">
-                        <button onClick={() => moveChapter(chapter.id, 'up')} className="p-1 hover:text-[#D9E021]"><ChevronUp className="w-3 h-3" /></button>
-                        <button onClick={() => moveChapter(chapter.id, 'down')} className="p-1 hover:text-[#D9E021]"><ChevronDown className="w-3 h-3" /></button>
-                        <button onClick={() => onCreateApu(project.id, chapter.id)} className="p-1 hover:text-[#88C13E]"><Plus className="w-3 h-3" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'up'); }} className="p-1 hover:text-[#D9E021]"><ChevronUp className="w-3 h-3" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'down'); }} className="p-1 hover:text-[#D9E021]"><ChevronDown className="w-3 h-3" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); onCreateApu(project.id, chapter.id); }} className="p-1 hover:text-[#88C13E]"><Plus className="w-3 h-3" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteChapter(chapter.id); }} className="p-1 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                       </div>
                     </div>
 
