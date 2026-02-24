@@ -54,7 +54,7 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
                 apu.code,
                 apu.name,
                 apu.unit,
-                decCell(apu.quantity),
+                decCell(apu.quantity.toFixed(1)),
                 numCell(stats.precioUnitarioNeto),
                 numCell(totalPartida)
             ]);

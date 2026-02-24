@@ -133,7 +133,13 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                       <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">{apu.code}</td>
                       <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
                       <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
-                      <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
+                      <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">
+                        {/* Cambia la lógica de formateo para que use 1 decimal */}
+                        {new Intl.NumberFormat('es-CL', { 
+                          minimumFractionDigits: 1, 
+                          maximumFractionDigits: 1 
+                        }).format(apu.quantity)}
+                      </td>
                       <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(apu.unitarioNeto)}</td>
                       <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(apu.subtotal)}</td>
                     </tr>

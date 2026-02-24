@@ -122,7 +122,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNum(apu.quantity)}`, 14, currentY + 20);
+      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNum(apu.quantity.toFixed(1))}`, 14, currentY + 20);
 
       currentY += 25;
 
