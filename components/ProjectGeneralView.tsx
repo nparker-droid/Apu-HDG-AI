@@ -22,34 +22,48 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
             const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
             const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
             const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
+
             const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + (i.total || 0), 0);
             const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + (i.total || 0), 0);
             const sMoBTotal = sMoB * (1 + laws / 100);
             const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
             const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
+
             const costoDirecto = sMat + sMoBTotal + sEq + sOt;
             const unitarioNeto = costoDirecto * (1 + (overhead + utility) / 100);
             const subtotal = unitarioNeto * apu.quantity;
+
             return { ...apu, unitarioNeto, subtotal };
           });
+
         const totalChapter = chapterApus.reduce((s, a) => s + a.subtotal, 0);
         totalNetoProyecto += totalChapter;
+
         return { ...chapter, apus: chapterApus, totalChapter };
       });
+
     return { chaptersWithTotals, totalNetoProyecto };
   }, [project, chapters, apus]);
 
   const formatCLP = (val: number) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(val));
+    return new Intl.NumberFormat('es-CL', { 
+      style: 'currency', 
+      currency: 'CLP', 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 0 
+    }).format(Math.round(val));
   };
 
-  // REDONDEO A 1 DECIMAL
+  // FORMATEADOR A 1 DECIMAL EXACTO
   const formatQuantity = (val: number) => {
-    return new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val);
+    return new Intl.NumberFormat('es-CL', { 
+      minimumFractionDigits: 1, 
+      maximumFractionDigits: 1 
+    }).format(val);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-800">
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center gap-3 mb-2 text-slate-400">
@@ -58,6 +72,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
           </div>
           <p className="text-3xl font-black text-[#004071]">{formatCLP(budgetData.totalNetoProyecto)}</p>
         </div>
+
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center gap-3 mb-2 text-slate-400">
             <TrendingUp className="w-5 h-5" />
@@ -65,6 +80,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
           </div>
           <p className="text-3xl font-black text-slate-500">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</p>
         </div>
+
         <div className="bg-[#004071] p-6 rounded-[2rem] shadow-xl text-white">
           <div className="flex items-center gap-3 mb-2 opacity-80">
             <PieChart className="w-5 h-5" />
@@ -106,6 +122,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                       <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">{apu.code}</td>
                       <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
                       <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
+                      {/* MOSTRAR 1 DECIMAL EN CANTIDAD */}
                       <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
                       <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(apu.unitarioNeto)}</td>
                       <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(apu.subtotal)}</td>
