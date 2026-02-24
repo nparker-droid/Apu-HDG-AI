@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, FileJson } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
@@ -31,25 +31,17 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // LÓGICA DE RENUMERACIÓN AUTOMÁTICA PROFUNDA
+  // Lógica de renumeración automática
   useEffect(() => {
     if (!activeProjectId) return;
-
-    // 1. Filtrar y ordenar capítulos por su posición actual en el estado
     const currentProjectChapters = chapters.filter(c => c.projectId === activeProjectId);
-    
-    // Solo procedemos si hay capítulos
     if (currentProjectChapters.length === 0) return;
 
     let needsUpdate = false;
-    
     const renumberedChapters = chapters.map(ch => {
       if (ch.projectId !== activeProjectId) return ch;
       const newCode = (currentProjectChapters.indexOf(ch) + 1).toString();
-      if (ch.code !== newCode) {
-        needsUpdate = true;
-        return { ...ch, code: newCode };
-      }
+      if (ch.code !== newCode) { needsUpdate = true; return { ...ch, code: newCode }; }
       return ch;
     });
 
@@ -57,18 +49,10 @@ const App: React.FC = () => {
       if (apu.projectId !== activeProjectId) return apu;
       const parentChapter = renumberedChapters.find(c => c.id === apu.chapterId);
       if (!parentChapter) return apu;
-
-      const siblings = apus
-        .filter(a => a.chapterId === apu.chapterId)
-        .sort((a, b) => a.createdAt - b.createdAt);
-      
+      const siblings = apus.filter(a => a.chapterId === apu.chapterId).sort((a, b) => a.createdAt - b.createdAt);
       const apuIndex = siblings.indexOf(apu) + 1;
       const newCode = `${parentChapter.code}.${apuIndex}`;
-      
-      if (apu.code !== newCode) {
-        needsUpdate = true;
-        return { ...apu, code: newCode };
-      }
+      if (apu.code !== newCode) { needsUpdate = true; return { ...apu, code: newCode }; }
       return apu;
     });
 
@@ -76,9 +60,9 @@ const App: React.FC = () => {
       setChapters(renumberedChapters);
       setApus(renumberedApus);
     }
-  }, [chapters, apus, activeProjectId]);
+  }, [chapters.length, apus.length, activeProjectId]);
 
-  // Autoguardado cada 60 segundos
+  // Autoguardado cada 60 segundos con indicador
   const saveRef = useRef(saveActiveProject);
   useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
 
@@ -88,7 +72,7 @@ const App: React.FC = () => {
       const result = saveRef.current();
       if (result) {
         setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
+        setTimeout(() => setSaveStatus('idle'), 3000);
       }
     }, 60000);
     return () => clearInterval(timer);
@@ -98,121 +82,71 @@ const App: React.FC = () => {
   const activeApu = useMemo(() => apus.find(a => a.id === currentApuId), [apus, currentApuId]);
   const activeChapter = useMemo(() => chapters.find(c => c.id === activeApu?.chapterId), [chapters, activeApu]);
 
-  const currentProjectApus = useMemo(() => {
-    if (!activeProjectId) return [];
-    return apus.filter(a => a.projectId === activeProjectId);
-  }, [apus, activeProjectId]);
-
+  // Manejador de Guardado Manual (Forzar persistencia y feedback)
   const handleManualSave = () => {
     setSaveStatus('saving');
+    const result = saveActiveProject();
     setTimeout(() => {
-      const result = saveActiveProject();
       if (result) {
         setSaveStatus('saved');
-        toast.success(`Proyecto guardado`);
+        toast.success(`Guardado manual exitoso`, { icon: <Save className="w-4 h-4" /> });
         setTimeout(() => setSaveStatus('idle'), 2000);
       } else {
         setSaveStatus('idle');
+        toast.error('Error al guardar localmente');
       }
-    }, 400);
+    }, 500);
   };
 
-  const handleProjectSubmit = (data: any) => {
-    if (editingProject) {
-      const updatedMeta = { ...editingProject, ...data, updatedAt: Date.now() };
-      setProjects(projects.map(p => p.id === editingProject.id ? updatedMeta : p));
-      setEditingProject(null);
-    } else {
-      const newId = safeUUID();
-      const timestamp = Date.now();
-      const newProject: Project = { ...data, id: newId, createdAt: timestamp, updatedAt: timestamp };
-      localStorage.setItem(`apu_engine_project_${newId}`, JSON.stringify({ metadata: newProject, chapters: [], apus: [] }));
-      setProjects([newProject, ...projects]);
-      loadProject(newId);
-      setCurrentApuId(null);
-    }
-    setIsProjectModalOpen(false);
-  };
-
-  const handleCreateChapter = (name: string) => {
-    if (!activeProjectId) return;
-    const newChapter = {
-      id: safeUUID(),
-      projectId: activeProjectId,
-      code: (chapters.filter(c => c.projectId === activeProjectId).length + 1).toString(),
-      name: name
+  // Exportar Backup JSON (Opción manual adicional)
+  const handleExportBackup = () => {
+    if (!activeProject) return;
+    const data = {
+      project: activeProject,
+      chapters: chapters.filter(c => c.projectId === activeProject.id),
+      apus: apus.filter(a => a.projectId === activeProject.id)
     };
-    addChapter(newChapter);
-    setChapterModalProjectId(null);
-  };
-
-  const createNewApu = (projectId: string, chapterId: string, baseApu?: Partial<APU>) => {
-    const proj = projects.find(p => p.id === projectId);
-    const newApu: APU = {
-      id: safeUUID(), projectId, chapterId,
-      code: '', 
-      name: baseApu?.name || 'Nueva Partida', 
-      unit: baseApu?.unit || 'GL', 
-      quantity: 1,
-      items: baseApu?.items ? JSON.parse(JSON.stringify(baseApu.items)) : { 
-        [ItemCategory.MATERIAL]: [], [ItemCategory.MANO_DE_OBRA]: [], [ItemCategory.EQUIPO]: [], [ItemCategory.OTROS]: [] 
-      },
-      useProjectGlobalRates: true, 
-      socialLawsPercentage: proj?.globalSocialLaws || 30, 
-      overheadPercentage: proj?.globalOverhead || 15, 
-      utilityPercentage: proj?.globalUtility || 10,
-      createdAt: Date.now(),
-    };
-    setApus([...apus, newApu]);
-    setCurrentApuId(newApu.id);
-    setLibraryChapterId(null);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BACKUP_${activeProject.code}_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    toast.info("Archivo de respaldo JSON generado");
   };
 
   return (
     <div className="flex h-screen bg-[#F1F5F9] overflow-hidden text-slate-800 font-sans">
-      <Toaster position="top-right" theme="light" expand={false} richColors />
+      <Toaster position="top-right" richColors />
       <Sidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        projects={projects}
-        chapters={chapters}
-        apus={apus}
-        moveChapter={moveChapter}
-        deleteChapter={deleteChapter}
+        isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen}
+        projects={projects} chapters={chapters} apus={apus}
+        moveChapter={moveChapter} deleteChapter={deleteChapter}
         currentProjectId={activeProjectId}
-        setCurrentProjectId={(id) => {
-          if (id) { loadProject(id); setCurrentApuId(null); }
-          else setActiveProjectId(null);
-        }}
-        currentApuId={currentApuId}
-        setCurrentApuId={setCurrentApuId}
+        setCurrentProjectId={(id) => { if (id) { loadProject(id); setCurrentApuId(null); } else setActiveProjectId(null); }}
+        currentApuId={currentApuId} setCurrentApuId={setCurrentApuId}
         onNewProject={() => { setEditingProject(null); setIsProjectModalOpen(true); }}
         onEditProject={(p) => { setEditingProject(p); setIsProjectModalOpen(true); }}
         onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
-        onLibraryOpen={(cid) => setLibraryChapterId(cid)}
-        onCreateApu={createNewApu}
-        onDuplicateApu={(a) => {
-          const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() };
-          setApus([...apus, dup]);
+        onLibraryOpen={setLibraryChapterId}
+        onCreateApu={(pid, cid, base) => {
+            const newApu: APU = {
+                id: safeUUID(), projectId: pid, chapterId: cid, code: '',
+                name: base?.name || 'Nueva Partida', unit: base?.unit || 'GL', quantity: 1,
+                items: base?.items || { [ItemCategory.MATERIAL]: [], [ItemCategory.MANO_DE_OBRA]: [], [ItemCategory.EQUIPO]: [], [ItemCategory.OTROS]: [] },
+                useProjectGlobalRates: true, socialLawsPercentage: activeProject?.globalSocialLaws || 30,
+                overheadPercentage: activeProject?.globalOverhead || 15, utilityPercentage: activeProject?.globalUtility || 10,
+                createdAt: Date.now()
+            };
+            setApus([...apus, newApu]);
+            setCurrentApuId(newApu.id);
         }}
-        onDeleteApu={(id) => {
-          deleteApu(id);
-          if (currentApuId === id) setCurrentApuId(null);
-        }}
-        onShareProject={() => {}}
+        onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; setApus([...apus, dup]); }}
+        onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
+        onShareProject={handleExportBackup}
         handleImport={() => {}}
-        onDeleteProject={(id) => {
-          deleteProject(id);
-          if (activeProjectId === id) {
-            setActiveProjectId(null);
-            setCurrentApuId(null);
-          }
-          toast.error('Proyecto eliminado');
-        }}
-        onDuplicateProject={(id) => {
-          const newId = duplicateProject(id);
-          if (newId) toast.success('Proyecto duplicado con éxito');
-        }}
+        onDeleteProject={deleteProject}
+        onDuplicateProject={duplicateProject}
       />
 
       <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar">
@@ -220,23 +154,26 @@ const App: React.FC = () => {
           <>
             <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
-                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071]">
-                  <Menu className="w-5 h-5" />
-                </button>
+                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071]"><Menu className="w-5 h-5" /></button>
                 <div>
-                  <h2 className="text-lg font-black text-[#004071] uppercase truncate max-w-md">
-                    {activeApu ? activeApu.name : `VISTA GENERAL: ${activeProject.name}`}
-                  </h2>
-                  <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name} • {activeProject.code}</p>
+                  <h2 className="text-lg font-black text-[#004071] uppercase truncate max-w-md">{activeApu ? activeApu.name : `VISTA GENERAL: ${activeProject.name}`}</h2>
+                  <div className="flex items-center gap-3">
+                    <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name}</p>
+                    {lastSaved && (
+                        <span className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase bg-slate-100 px-2 py-0.5 rounded-full">
+                            <Clock className="w-2.5 h-2.5" /> Autoguardado: {new Date(lastSaved).toLocaleTimeString()}
+                        </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={handleManualSave} disabled={saveStatus === 'saving'} className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 uppercase tracking-widest">
+                <button onClick={handleManualSave} disabled={saveStatus === 'saving'} className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 uppercase tracking-widest transition-all">
                   {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />} 
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  {saveStatus === 'saved' ? 'Sincronizado' : 'Guardar Local'}
                 </button>
-                <button onClick={() => exportProjectToExcel(activeProject, chapters, apus)} className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg uppercase tracking-widest">
-                  <Download className="w-3 h-3" /> Excel
+                <button onClick={() => exportProjectToExcel(activeProject, chapters, apus)} className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg hover:bg-green-700 uppercase tracking-widest transition-all">
+                  <Download className="w-3 h-3" /> Reporte Excel
                 </button>
               </div>
             </header>
@@ -249,19 +186,24 @@ const App: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center min-h-screen text-center max-w-xl mx-auto space-y-12 animate-in fade-in duration-500">
-             {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="fixed top-4 left-4 p-3 bg-white shadow-lg rounded-xl text-[#004071] z-50 border border-slate-100"><Menu className="w-6 h-6" /></button>}
-             <h1 className="text-4xl font-black text-[#004071] uppercase leading-none">Hidrogestión APU ENGINE</h1>
-             <button onClick={() => { setEditingProject(null); setIsProjectModalOpen(true); }} className="bg-[#004071] text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Nuevo Proyecto</button>
+          <div className="flex flex-col items-center justify-center min-h-screen text-center space-y-8">
+             <h1 className="text-4xl font-black text-[#004071] uppercase">Hidrogestión APU ENGINE</h1>
+             <button onClick={() => setIsProjectModalOpen(true)} className="bg-[#004071] text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Nuevo Proyecto</button>
           </div>
         )}
       </main>
 
-      {isProjectModalOpen && <ProjectModal initialData={editingProject || undefined} onClose={() => { setIsProjectModalOpen(false); setEditingProject(null); }} onSubmit={handleProjectSubmit} />}
-      {chapterModalProjectId && <ChapterModal onClose={() => setChapterModalProjectId(null)} onSubmit={handleCreateChapter} />}
-      {libraryChapterId && (
-        <LibraryModal onClose={() => setLibraryChapterId(null)} projectApus={currentProjectApus} onSelect={(libApu) => { if (activeProject) createNewApu(activeProject.id, libraryChapterId, libApu); }} />
-      )}
+      {isProjectModalOpen && <ProjectModal initialData={editingProject || undefined} onClose={() => setIsProjectModalOpen(false)} onSubmit={(data) => {
+          const newId = safeUUID();
+          const newP = { ...data, id: newId, createdAt: Date.now(), updatedAt: Date.now() };
+          setProjects([newP, ...projects]);
+          loadProject(newId);
+          setIsProjectModalOpen(false);
+      }} />}
+      {chapterModalProjectId && <ChapterModal onClose={() => setChapterModalProjectId(null)} onSubmit={(name) => {
+          addChapter({ id: safeUUID(), projectId: activeProjectId!, code: '', name });
+          setChapterModalProjectId(null);
+      }} />}
     </div>
   );
 };

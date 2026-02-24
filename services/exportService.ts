@@ -59,7 +59,7 @@ const addPageNumbers = (doc: any) => {
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text(`Página ${i} de ${pageCount} | Reporte Generado por APU Engine Pro`, 196, 288, { align: 'right' });
+    doc.text(`Página ${i} de ${pageCount}`, 196, 288, { align: 'right' });
   }
 };
 

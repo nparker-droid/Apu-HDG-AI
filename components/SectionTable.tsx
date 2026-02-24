@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, ClipboardPaste, X, Check, Map as MapIcon } from 'lucide-react';
 import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
@@ -77,7 +76,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
   }, [category]);
 
   const filteredHistory = useMemo(() => {
-    // SEGURIDAD CRÍTICA: Si el índice no es válido para el array actual, abortar inmediatamente
+    // SEGURIDAD CRÍTICA: Validar que el índice exista dentro del array actual
     if (showHistoryForIdx === null || !items || !items[showHistoryForIdx]) {
       return [];
     }
@@ -116,8 +115,8 @@ const SectionTable: React.FC<SectionTableProps> = ({
         id: crypto.randomUUID(), 
         description: '', 
         unit: '', 
-        quantity: 1, 
-        performance: 1, 
+        quantity: 1.0, 
+        performance: 1.0, 
         unitPrice: 0, 
         total: 0 
     };
@@ -195,7 +194,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
         chapterName
       });
     }
-    // Aumentamos el delay para dar tiempo a que los navegadores procesen el click en la sugerencia
+    // Delay de compatibilidad para navegadores comerciales
     setTimeout(() => {
         setShowHistoryForIdx(null);
     }, 300);
@@ -263,7 +262,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
   };
 
   const selectFromHistory = (idx: number, h: HistoryItem) => {
-    // Verificación de seguridad antes de actualizar
     if (!items || !items[idx]) return;
     const newItems = [...items];
     newItems[idx] = { 
@@ -365,7 +363,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 placeholder:text-slate-300 transition-colors" 
                   />
                 </div>
-                {/* LISTA DE SUGERENCIAS CON PROTECCIONES ADICIONALES */}
                 {showHistoryForIdx === idx && filteredHistory.length > 0 && (
                   <div className="absolute z-[100] left-0 top-full mt-2 w-full min-w-[320px] bg-white border border-slate-200 shadow-2xl rounded-[1.5rem] p-3 animate-in fade-in slide-in-from-top-2 transition-colors">
                     <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2">Sugerencias (Biblioteca + Historial)</div>
@@ -382,7 +379,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                             <div className="flex items-center gap-1.5">
                                 <span className="text-[8px] uppercase font-black opacity-60">
                                     {formatUnit(h.unit || '')} 
-                                    {(h.performance !== undefined && h.performance !== null) ? ` | Rend: ${Number(h.performance).toFixed(3)}` : ''}
+                                    {(h.performance !== undefined && h.performance !== null) ? ` | Rend: ${Number(h.performance).toFixed(1)}` : ''}
                                 </span>
                                 {h.chapterName && (
                                 <span className="flex items-center gap-1 text-[7px] font-black text-[#88C13E] bg-[#88C13E]/10 px-1.5 py-0.5 rounded-full uppercase group-hover:bg-white/20 group-hover:text-white">
@@ -408,9 +405,9 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   </button>
                   <input 
                     type="number" 
-                    step="0.001" 
-                    value={isLabor ? (item.performance ?? 0) : (item.quantity ?? 0)} 
-                    onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', e.target.value)} 
+                    step="0.1" 
+                    value={isLabor ? (item.performance ?? 0).toFixed(1) : (item.quantity ?? 0).toFixed(1)} 
+                    onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', parseFloat(e.target.value) || 0)} 
                     onBlur={() => { checkDeviation(item, 'performance'); handleBlurItem(idx); }} 
                     className={`w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black transition-colors ${activeAlert?.itemId === item.id && activeAlert.field === 'performance' ? 'text-amber-500' : 'text-[#88C13E]'}`} 
                   />
@@ -424,7 +421,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   <input 
                     type="number" 
                     value={item.unitPrice ?? 0} 
-                    onChange={e => updateItem(idx, 'unitPrice', e.target.value)} 
+                    onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} 
                     onBlur={() => { checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }} 
                     className={`w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black transition-colors ${activeAlert?.itemId === item.id && activeAlert.field === 'unitPrice' ? 'text-amber-500' : 'text-slate-600'}`} 
                   />
@@ -450,7 +447,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                <div className="flex flex-col">
                   <span className="text-[8px] font-bold text-slate-400 uppercase">{activeAlert.isAiSuggestion ? 'Sugerido' : 'Promedio Histórico'}</span>
                   <span className="text-sm font-black text-[#004071] font-mono">
-                    {activeAlert.field === 'unitPrice' ? `$${Math.round(activeAlert.avgValue).toLocaleString('es-CL')}` : (activeAlert.avgValue || 0).toFixed(3)}
+                    {activeAlert.field === 'unitPrice' ? `$${Math.round(activeAlert.avgValue).toLocaleString('es-CL')}` : (activeAlert.avgValue || 0).toFixed(1)}
                   </span>
                </div>
                <button 
