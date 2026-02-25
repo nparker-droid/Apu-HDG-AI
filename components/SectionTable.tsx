@@ -215,7 +215,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                 <input
                   type="number"
                   step="0.1"
-                  value={(Number(isLabor ? item.performance : item.quantity) || 0).toFixed(1)}
+                  value={(Number(isLabor ? item.performance : item.quantity) || 0).toFixed(3)}
                   onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', parseFloat(e.target.value) || 0)}
                   onBlur={() => { checkDeviation(item, 'performance'); handleBlurItem(idx); }}
                   className="w-full text-right bg-transparent border-none font-mono text-sm font-black text-[#88C13E]"

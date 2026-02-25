@@ -8,7 +8,8 @@ const getJsPDF = () => {
 };
 
 export const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
-const formatNum = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const formatNumAPU = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const formatNumPresupuesto = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export const formatUnit = (unit: string) => {
   if (!unit) return '';
@@ -122,7 +123,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
 
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNum(apu.quantity)}`, 14, currentY + 20);
+      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNumAPU(apu.quantity)}`, 14, currentY + 20);
 
       currentY += 25;
 
@@ -136,7 +137,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
           body: items.map(i => [
             i.description,
             formatUnit(i.unit),
-            formatNum(cat === ItemCategory.MANO_DE_OBRA ? (i.performance || 0) : i.quantity),
+            formatNumAPU(cat === ItemCategory.MANO_DE_OBRA ? (i.performance || 0) : i.quantity),
             formatCLP(i.unitPrice),
             formatCLP(i.total)
           ]),
@@ -213,7 +214,7 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
       const stats = calculateTotals(apu, project);
       const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
       totalNetoProyecto += subtotalPartida;
-      return [apu.code, apu.name, formatUnit(apu.unit), formatNum(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
+      return [apu.code, apu.name, formatUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
     });
 
     (doc as any).autoTable({
@@ -238,8 +239,12 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
     currentY = (doc as any).lastAutoTable.finalY + 5;
   });
 
-  const finalY = currentY + 10;
-  if (finalY > 250) { doc.addPage(); drawCorporateHeader(doc, project, 'Presupuesto de Obras'); }
+  let finalY = currentY + 10;
+  if (finalY > 250) {
+    doc.addPage();
+    drawCorporateHeader(doc, project, 'Presupuesto de Obras');
+    finalY = 45; // Resetear Y para que no quede al fondo
+  }
 
   const boxWidth = 85;
   const startX = 196 - boxWidth;
