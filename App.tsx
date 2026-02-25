@@ -31,51 +31,12 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // --- Lógica de renumeración segura ---
-  useEffect(() => {
-    if (!activeProjectId || chapters.length === 0) return;
+  // --- 1. SELECCIÓN DE DATOS SEGURA ---
+  // Usamos useMemo para obtener las referencias exactas y evitar renders innecesarios
+  const activeProject = useMemo(() => 
+    projects.find(p => p.id === activeProjectId) || null, 
+  [projects, activeProjectId]);
 
-    const currentProjectChapters = chapters.filter(c => c.projectId === activeProjectId);
-    
-    const renumberedChapters = chapters.map(ch => {
-      if (ch.projectId !== activeProjectId) return ch;
-      const index = currentProjectChapters.findIndex(c => c.id === ch.id);
-      return { ...ch, code: (index + 1).toString() };
-    });
-
-    const renumberedApus = apus.map(apu => {
-      if (apu.projectId !== activeProjectId) return apu;
-      const chapter = renumberedChapters.find(c => c.id === apu.chapterId);
-      if (!chapter) return apu;
-      const chapterApus = apus.filter(a => a.chapterId === apu.chapterId).sort((a, b) => a.createdAt - b.createdAt);
-      const index = chapterApus.findIndex(a => a.id === apu.id);
-      return { ...apu, code: `${chapter.code}.${index + 1}` };
-    });
-
-    // Solo actualizar si realmente hubo un cambio para evitar bucles infinitos
-    if (JSON.stringify(renumberedChapters) !== JSON.stringify(chapters)) setChapters(renumberedChapters);
-    if (JSON.stringify(renumberedApus) !== JSON.stringify(apus)) setApus(renumberedApus);
-  }, [chapters.length, apus.length, activeProjectId]);
-
-  // --- Autoguardado ---
-  const saveRef = useRef(saveActiveProject);
-  useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
-
-  useEffect(() => {
-    if (!activeProjectId) return;
-    const timer = setInterval(() => {
-      const result = saveRef.current();
-      if (result) {
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      }
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [activeProjectId]);
-
-  // --- SELECCIÓN SEGURA DE DATOS (Previene Pantalla Blanca) ---
-  const activeProject = useMemo(() => projects.find(p => p.id === activeProjectId), [projects, activeProjectId]);
-  
   const activeApu = useMemo(() => {
     if (!currentApuId || apus.length === 0) return null;
     return apus.find(a => a.id === currentApuId) || null;
@@ -86,11 +47,40 @@ const App: React.FC = () => {
     return chapters.find(c => c.id === activeApu.chapterId) || null;
   }, [chapters, activeApu]);
 
+  // --- 2. RENUMERACIÓN (Efecto optimizado para evitar loops) ---
+  useEffect(() => {
+    if (!activeProjectId || chapters.length === 0) return;
+
+    const projectChapters = chapters.filter(c => c.projectId === activeProjectId);
+    
+    // Generar nuevos estados
+    const newChapters = chapters.map(ch => {
+      if (ch.projectId !== activeProjectId) return ch;
+      const idx = projectChapters.findIndex(c => c.id === ch.id);
+      return { ...ch, code: (idx + 1).toString() };
+    });
+
+    const newApus = apus.map(apu => {
+      if (apu.projectId !== activeProjectId) return apu;
+      const ch = newChapters.find(c => c.id === apu.chapterId);
+      if (!ch) return apu;
+      const siblings = apus.filter(a => a.chapterId === apu.chapterId).sort((a, b) => a.createdAt - b.createdAt);
+      const idx = siblings.findIndex(s => s.id === apu.id);
+      return { ...apu, code: `${ch.code}.${idx + 1}` };
+    });
+
+    // Solo disparamos el cambio si hay diferencia real para evitar el crash por recursión
+    if (JSON.stringify(newChapters) !== JSON.stringify(chapters)) setChapters(newChapters);
+    if (JSON.stringify(newApus) !== JSON.stringify(apus)) setApus(newApus);
+  }, [chapters.length, apus.length, activeProjectId]);
+
+  // --- 3. MANEJADORES DE EVENTOS ---
   const handleManualSave = () => {
     setSaveStatus('saving');
-    if (saveActiveProject()) {
+    const result = saveActiveProject();
+    if (result) {
       setSaveStatus('saved');
-      toast.success("Cambios sincronizados");
+      toast.success("Proyecto sincronizado");
       setTimeout(() => setSaveStatus('idle'), 2000);
     }
   };
@@ -109,7 +99,11 @@ const App: React.FC = () => {
           if (id) loadProject(id); 
           setCurrentApuId(null); 
         }}
-        currentApuId={currentApuId} setCurrentApuId={setCurrentApuId}
+        currentApuId={currentApuId} 
+        setCurrentApuId={(id) => {
+           // Si el ID es igual al actual, no hacemos nada para evitar flickering
+           if(id !== currentApuId) setCurrentApuId(id);
+        }}
         onNewProject={() => { setEditingProject(null); setIsProjectModalOpen(true); }}
         onEditProject={(p) => { setEditingProject(p); setIsProjectModalOpen(true); }}
         onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
@@ -139,7 +133,7 @@ const App: React.FC = () => {
                 {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-[#004071]"><Menu className="w-5 h-5" /></button>}
                 <div>
                   <h2 className="text-lg font-black text-[#004071] uppercase truncate max-w-md">
-                    {/* Guard condicional para evitar errores de renderizado */}
+                    {/* Verificación de existencia para el título */}
                     {activeApu ? activeApu.name : `GENERAL: ${activeProject.name}`}
                   </h2>
                   <div className="flex items-center gap-3">
@@ -159,16 +153,18 @@ const App: React.FC = () => {
             </header>
 
             <div className="p-8">
-              {/* Solo renderizamos APUEditor si AMBOS existen. Si no, mostramos GeneralView de forma segura */}
+              {/* Lógica de renderizado con "Fail-Safe" */}
               {activeApu && activeChapter ? (
-                <APUEditor 
-                  apu={activeApu} 
-                  onUpdate={updateApu} 
-                  history={history} 
-                  project={activeProject} 
-                  chapter={activeChapter} 
-                  onRegisterResource={addHistoryItem} 
-                />
+                <div key={activeApu.id}> {/* Key única para forzar el remount del editor al cambiar partida */}
+                  <APUEditor 
+                    apu={activeApu} 
+                    onUpdate={updateApu} 
+                    history={history} 
+                    project={activeProject} 
+                    chapter={activeChapter} 
+                    onRegisterResource={addHistoryItem} 
+                  />
+                </div>
               ) : (
                 <ProjectGeneralView 
                   project={activeProject} 
@@ -179,14 +175,12 @@ const App: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center space-y-4">
-             <h1 className="text-4xl font-black text-[#004071] uppercase tracking-tighter">Hidrogestión APU ENGINE</h1>
-             <p className="text-slate-400 text-sm">Selecciona o crea un proyecto para comenzar</p>
+          <div className="h-full flex flex-col items-center justify-center">
+             <h1 className="text-4xl font-black text-[#004071] uppercase">Hidrogestión APU ENGINE</h1>
           </div>
         )}
       </main>
 
-      {/* Modales */}
       {isProjectModalOpen && <ProjectModal initialData={editingProject || undefined} onClose={() => setIsProjectModalOpen(false)} onSubmit={(data) => {
         const newId = safeUUID();
         setProjects([{ ...data, id: newId, createdAt: Date.now(), updatedAt: Date.now() }, ...projects]);
