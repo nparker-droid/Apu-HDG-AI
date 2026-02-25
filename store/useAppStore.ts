@@ -56,21 +56,30 @@ export const useAppStore = create<AppState>()(
       })),
 
       moveChapter: (id, direction) => set((state) => {
-        const projectChapters = state.chapters.filter(c => c.projectId === state.activeProjectId);
-        const index = projectChapters.findIndex(c => c.id === id);
-        if (index === -1) return state;
+        const activeId = state.activeProjectId;
+        if (!activeId) return state;
 
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= projectChapters.length) return state;
-
-        // Crear una copia de todos los capítulos
+        // 1. Obtener todos los capítulos
         const allChapters = [...state.chapters];
         
-        // Encontrar los índices reales en el array global
-        const realIdx1 = allChapters.findIndex(c => c.id === projectChapters[index].id);
-        const realIdx2 = allChapters.findIndex(c => c.id === projectChapters[newIndex].id);
+        // 2. Identificar los que pertenecen al proyecto activo para saber el orden relativo
+        const projectChapters = allChapters.filter(c => c.projectId === activeId);
+        const indexInProject = projectChapters.findIndex(c => c.id === id);
+        
+        if (indexInProject === -1) return state;
 
-        // Intercambiar posiciones físicamente en el array
+        const targetIndexInProject = direction === 'up' ? indexInProject - 1 : indexInProject + 1;
+        
+        if (targetIndexInProject < 0 || targetIndexInProject >= projectChapters.length) return state;
+
+        // 3. Encontrar los índices reales en el array global (allChapters)
+        const id1 = projectChapters[indexInProject].id;
+        const id2 = projectChapters[targetIndexInProject].id;
+        
+        const realIdx1 = allChapters.findIndex(c => c.id === id1);
+        const realIdx2 = allChapters.findIndex(c => c.id === id2);
+
+        // 4. Intercambiar físicamente
         const temp = allChapters[realIdx1];
         allChapters[realIdx1] = allChapters[realIdx2];
         allChapters[realIdx2] = temp;
@@ -87,15 +96,11 @@ export const useAppStore = create<AppState>()(
       })),
 
       addHistoryItem: (item) => set((state) => {
-        const exists = state.history.find(
-          (h) => h.description.toLowerCase() === item.description.toLowerCase() && h.category === item.category
+        const cleanDescription = item.description.trim().toLowerCase();
+        const filteredHistory = state.history.filter(
+          (h) => h.description.trim().toLowerCase() !== cleanDescription || h.category !== item.category
         );
-        if (exists) {
-          return {
-            history: state.history.map((h) => h === exists ? item : h)
-          };
-        }
-        return { history: [item, ...state.history].slice(0, 500) };
+        return { history: [item, ...filteredHistory].slice(0, 500) };
       }),
 
       loadProject: (id) => set({ activeProjectId: id }),
@@ -121,7 +126,8 @@ export const useAppStore = create<AppState>()(
           ...project, 
           id: newProjectId, 
           name: `${project.name} (Copia)`,
-          createdAt: Date.now() 
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
 
         const projectChapters = state.chapters.filter(c => c.projectId === id);
