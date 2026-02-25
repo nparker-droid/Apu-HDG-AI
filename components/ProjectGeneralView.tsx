@@ -13,20 +13,20 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   const budgetData = useMemo(() => {
     let totalNetoProyecto = 0;
     const chaptersWithTotals = chapters
-      .filter(c => c && c.projectId === project.id)
+      .filter(c => c.projectId === project.id)
       .map(chapter => {
         const chapterApus = apus
-          .filter(a => a && a.chapterId === chapter.id)
+          .filter(a => a.chapterId === chapter.id)
           .map(apu => {
-            const laws = Number(apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage) || 0;
-            const overhead = Number(apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage) || 0;
-            const utility = Number(apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage) || 0;
+            const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
+            const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
+            const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
 
-            const sMat = (apu.items[ItemCategory.MATERIAL] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
-            const sMoB = (apu.items[ItemCategory.MANO_DE_OBRA] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+            const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + (i.total || 0), 0);
+            const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + (i.total || 0), 0);
             const sMoBTotal = sMoB * (1 + laws / 100);
-            const sEq = (apu.items[ItemCategory.EQUIPO] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
-            const sOt = (apu.items[ItemCategory.OTROS] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+            const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
+            const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
 
             const costoDirecto = sMat + sMoBTotal + sEq + sOt;
             const unitarioNeto = costoDirecto * (1 + (overhead + utility) / 100);
@@ -35,7 +35,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
             return { ...apu, unitarioNeto, subtotal };
           });
 
-        const totalChapter = chapterApus.reduce((s, a) => s + (Number(a.subtotal) || 0), 0);
+        const totalChapter = chapterApus.reduce((s, a) => s + a.subtotal, 0);
         totalNetoProyecto += totalChapter;
 
         return { ...chapter, apus: chapterApus, totalChapter };
@@ -44,22 +44,22 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
     return { chaptersWithTotals, totalNetoProyecto };
   }, [project, chapters, apus]);
 
-  const formatCLP = (val: any) => {
-    const num = Math.round(Number(val) || 0);
+  const formatCLP = (val: number) => {
     return new Intl.NumberFormat('es-CL', { 
       style: 'currency', 
       currency: 'CLP', 
       minimumFractionDigits: 0, 
       maximumFractionDigits: 0 
-    }).format(num);
+    }).format(Math.round(val));
   };
 
+  // FORMATEADOR SEGURO A 1 DECIMAL
   const formatQuantity = (val: any) => {
-    const num = Number(val) || 0;
+    const numericVal = Number(val) || 0;
     return new Intl.NumberFormat('es-CL', { 
       minimumFractionDigits: 1, 
       maximumFractionDigits: 1 
-    }).format(num);
+    }).format(numericVal);
   };
 
   return (
@@ -93,7 +93,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-8 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
           <h3 className="text-sm font-black text-[#004071] uppercase tracking-tighter">Estructura de Costos del Proyecto</h3>
-          <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="flex items-center gap-2 bg-[#004071] text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-[#003056] transition-all">
+          <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all">
             <FileText className="w-4 h-4" /> Exportar PDF
           </button>
         </div>
