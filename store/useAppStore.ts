@@ -1,35 +1,46 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Project, Chapter, APU, HistoryItem } from '../types';
 
-// Prefijos para localStorage
 const LIB_KEY = 'apu_engine_library';
 const PROJECT_PREFIX = 'apu_engine_project_';
 
-export const useAppStore = () => {
+interface AppContextType {
+  projects: Project[];
+  chapters: Chapter[];
+  apus: APU[];
+  activeProjectId: string | null;
+  lastSaved: number | null;
+  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+  setActiveProjectId: (id: string | null) => void;
+  loadProject: (id: string) => void;
+  saveActiveProject: () => boolean;
+  moveChapter: (id: string, direction: 'up' | 'down') => void;
+  updateApu: (apu: APU) => void;
+  deleteChapter: (id: string) => void;
+  deleteApu: (id: string) => void;
+  addChapter: (chapter: Chapter) => void;
+  addHistoryItem: (item: HistoryItem) => void;
+  history: HistoryItem[];
+  deleteProject: (id: string) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(LIB_KEY);
     return saved ? JSON.parse(saved) : [];
   });
-
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [apus, setApus] = useState<APU[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
 
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    const saved = localStorage.getItem('apu_history');
-    return saved ? JSON.parse(saved) : [];
-  });
+  useEffect(() => { localStorage.setItem(LIB_KEY, JSON.stringify(projects)); }, [projects]);
 
-  // Persistencia de proyectos base
-  useEffect(() => {
-    localStorage.setItem(LIB_KEY, JSON.stringify(projects));
-  }, [projects]);
-
-  // Carga de datos del proyecto activo
   const loadProject = useCallback((id: string) => {
-    const dataKey = `${PROJECT_PREFIX}${id}`;
-    const savedData = localStorage.getItem(dataKey);
+    const savedData = localStorage.getItem(`${PROJECT_PREFIX}${id}`);
     if (savedData) {
       const parsed = JSON.parse(savedData);
       setChapters(parsed.chapters || []);
@@ -39,48 +50,55 @@ export const useAppStore = () => {
     }
   }, []);
 
-  // Guardado manual/automático
   const saveActiveProject = useCallback(() => {
     if (!activeProjectId) return false;
     const timestamp = Date.now();
-    const activeProjectMeta = projects.find(p => p.id === activeProjectId);
-    if (!activeProjectMeta) return false;
-
-    const updatedMeta = { ...activeProjectMeta, updatedAt: timestamp };
-    const projectData = { chapters, apus, metadata: updatedMeta };
-    
-    localStorage.setItem(`${PROJECT_PREFIX}${activeProjectId}`, JSON.stringify(projectData));
+    const activeMeta = projects.find(p => p.id === activeProjectId);
+    if (!activeMeta) return false;
+    const updatedMeta = { ...activeMeta, updatedAt: timestamp };
+    localStorage.setItem(`${PROJECT_PREFIX}${activeProjectId}`, JSON.stringify({ chapters, apus, metadata: updatedMeta }));
     setProjects(prev => prev.map(p => p.id === activeProjectId ? updatedMeta : p));
     setLastSaved(timestamp);
     return true;
   }, [activeProjectId, projects, chapters, apus]);
 
-  // LÓGICA CORREGIDA: Intercambio físico de posiciones para renumeración
   const moveChapter = useCallback((id: string, direction: 'up' | 'down') => {
     setChapters(prev => {
-      const projectChapters = prev.filter(c => c.projectId === activeProjectId);
-      const otherChapters = prev.filter(c => c.projectId !== activeProjectId);
-      
-      const index = projectChapters.findIndex(c => c.id === id);
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      
-      if (targetIndex < 0 || targetIndex >= projectChapters.length) return prev;
-
-      const newProjectChapters = [...projectChapters];
-      const temp = newProjectChapters[index];
-      newProjectChapters[index] = newProjectChapters[targetIndex];
-      newProjectChapters[targetIndex] = temp;
-
-      return [...otherChapters, ...newProjectChapters];
+      const projChapters = prev.filter(c => c.projectId === activeProjectId);
+      const others = prev.filter(c => c.projectId !== activeProjectId);
+      const index = projChapters.findIndex(c => c.id === id);
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= projChapters.length) return prev;
+      const newList = [...projChapters];
+      [newList[index], newList[target]] = [newList[target], newList[index]];
+      return [...others, ...newList];
     });
   }, [activeProjectId]);
 
-  return {
-    projects, setProjects,
-    chapters, setChapters, moveChapter,
-    apus, setApus,
-    history, setHistory,
-    activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
-    lastSaved
+  const updateApu = (apu: APU) => setApus(prev => prev.map(a => a.id === apu.id ? apu : a));
+  const deleteChapter = (id: string) => setChapters(prev => prev.filter(c => c.id !== id));
+  const deleteApu = (id: string) => setApus(prev => prev.filter(a => a.id !== id));
+  const addChapter = (c: Chapter) => setChapters(prev => [...prev, c]);
+  const addHistoryItem = (i: HistoryItem) => setHistory(prev => [i, ...prev].slice(0, 500));
+  const deleteProject = (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    localStorage.removeItem(`${PROJECT_PREFIX}${id}`);
+    if (activeProjectId === id) setActiveProjectId(null);
   };
+
+  return (
+    <AppContext.Provider value={{ 
+      projects, setProjects, chapters, apus, activeProjectId, setActiveProjectId, 
+      loadProject, saveActiveProject, moveChapter, updateApu, deleteChapter, deleteApu, 
+      addChapter, addHistoryItem, history, lastSaved, deleteProject 
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useAppStore = () => {
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useAppStore must be used within AppProvider');
+  return context;
 };
