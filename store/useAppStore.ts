@@ -1,108 +1,157 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Project, Chapter, APU, HistoryItem } from '../types';
 
-const LIB_KEY = 'apu_engine_library';
-const PROJECT_PREFIX = 'apu_engine_project_';
-
-interface AppContextType {
+interface AppState {
   projects: Project[];
   chapters: Chapter[];
   apus: APU[];
+  history: HistoryItem[];
   activeProjectId: string | null;
   lastSaved: number | null;
-  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+  
+  setProjects: (projects: Project[]) => void;
+  setChapters: (chapters: Chapter[]) => void;
+  setApus: (apus: APU[]) => void;
+  setHistory: (history: HistoryItem[]) => void;
   setActiveProjectId: (id: string | null) => void;
+  
+  addChapter: (chapter: Chapter) => void;
+  deleteChapter: (id: string) => void;
+  moveChapter: (id: string, direction: 'up' | 'down') => void;
+  
+  updateApu: (apu: APU) => void;
+  deleteApu: (id: string) => void;
+  addHistoryItem: (item: HistoryItem) => void;
+  
   loadProject: (id: string) => void;
   saveActiveProject: () => boolean;
-  moveChapter: (id: string, direction: 'up' | 'down') => void;
-  updateApu: (apu: APU) => void;
-  deleteChapter: (id: string) => void;
-  deleteApu: (id: string) => void;
-  addChapter: (chapter: Chapter) => void;
-  addHistoryItem: (item: HistoryItem) => void;
-  history: HistoryItem[];
   deleteProject: (id: string) => void;
+  duplicateProject: (id: string) => void;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      projects: [],
+      chapters: [],
+      apus: [],
+      history: [],
+      activeProjectId: null,
+      lastSaved: null,
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem(LIB_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [apus, setApus] = useState<APU[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [lastSaved, setLastSaved] = useState<number | null>(null);
+      setProjects: (projects) => set({ projects }),
+      setChapters: (chapters) => set({ chapters }),
+      setApus: (apus) => set({ apus }),
+      setHistory: (history) => set({ history }),
+      setActiveProjectId: (id) => set({ activeProjectId: id }),
 
-  useEffect(() => { localStorage.setItem(LIB_KEY, JSON.stringify(projects)); }, [projects]);
+      addChapter: (chapter) => set((state) => ({ 
+        chapters: [...state.chapters, chapter] 
+      })),
 
-  const loadProject = useCallback((id: string) => {
-    const savedData = localStorage.getItem(`${PROJECT_PREFIX}${id}`);
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      setChapters(parsed.chapters || []);
-      setApus(parsed.apus || []);
-      setActiveProjectId(id);
-      setLastSaved(parsed.metadata?.updatedAt || null);
+      deleteChapter: (id) => set((state) => ({
+        chapters: state.chapters.filter((c) => c.id !== id),
+        apus: state.apus.filter((a) => a.chapterId !== id)
+      })),
+
+      moveChapter: (id, direction) => set((state) => {
+        const projectChapters = state.chapters.filter(c => c.projectId === state.activeProjectId);
+        const index = projectChapters.findIndex(c => c.id === id);
+        if (index === -1) return state;
+
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= projectChapters.length) return state;
+
+        // Crear una copia de todos los capítulos
+        const allChapters = [...state.chapters];
+        
+        // Encontrar los índices reales en el array global
+        const realIdx1 = allChapters.findIndex(c => c.id === projectChapters[index].id);
+        const realIdx2 = allChapters.findIndex(c => c.id === projectChapters[newIndex].id);
+
+        // Intercambiar posiciones físicamente en el array
+        const temp = allChapters[realIdx1];
+        allChapters[realIdx1] = allChapters[realIdx2];
+        allChapters[realIdx2] = temp;
+
+        return { chapters: allChapters };
+      }),
+
+      updateApu: (updatedApu) => set((state) => ({
+        apus: state.apus.map((a) => (a.id === updatedApu.id ? updatedApu : a))
+      })),
+
+      deleteApu: (id) => set((state) => ({
+        apus: state.apus.filter((a) => a.id !== id)
+      })),
+
+      addHistoryItem: (item) => set((state) => {
+        const exists = state.history.find(
+          (h) => h.description.toLowerCase() === item.description.toLowerCase() && h.category === item.category
+        );
+        if (exists) {
+          return {
+            history: state.history.map((h) => h === exists ? item : h)
+          };
+        }
+        return { history: [item, ...state.history].slice(0, 500) };
+      }),
+
+      loadProject: (id) => set({ activeProjectId: id }),
+
+      saveActiveProject: () => {
+        set({ lastSaved: Date.now() });
+        return true;
+      },
+
+      deleteProject: (id) => set((state) => ({
+        projects: state.projects.filter(p => p.id !== id),
+        chapters: state.chapters.filter(c => c.projectId !== id),
+        apus: state.apus.filter(a => a.projectId !== id),
+        activeProjectId: state.activeProjectId === id ? null : state.activeProjectId
+      })),
+
+      duplicateProject: (id) => set((state) => {
+        const project = state.projects.find(p => p.id === id);
+        if (!project) return state;
+
+        const newProjectId = crypto.randomUUID();
+        const newProject = { 
+          ...project, 
+          id: newProjectId, 
+          name: `${project.name} (Copia)`,
+          createdAt: Date.now() 
+        };
+
+        const projectChapters = state.chapters.filter(c => c.projectId === id);
+        const newChapters = projectChapters.map(c => ({
+          ...c,
+          id: crypto.randomUUID(),
+          projectId: newProjectId
+        }));
+
+        const projectApus = state.apus.filter(a => a.projectId === id);
+        const newApus = projectApus.map(a => {
+          const oldChapter = projectChapters.find(c => c.id === a.chapterId);
+          const newChapter = newChapters.find(c => oldChapter && c.name === oldChapter.name);
+          return {
+            ...a,
+            id: crypto.randomUUID(),
+            projectId: newProjectId,
+            chapterId: newChapter?.id || a.chapterId
+          };
+        });
+
+        return {
+          projects: [newProject, ...state.projects],
+          chapters: [...state.chapters, ...newChapters],
+          apus: [...state.apus, ...newApus]
+        };
+      })
+    }),
+    {
+      name: 'apu-engine-storage',
     }
-  }, []);
-
-  const saveActiveProject = useCallback(() => {
-    if (!activeProjectId) return false;
-    const timestamp = Date.now();
-    const activeMeta = projects.find(p => p.id === activeProjectId);
-    if (!activeMeta) return false;
-    const updatedMeta = { ...activeMeta, updatedAt: timestamp };
-    localStorage.setItem(`${PROJECT_PREFIX}${activeProjectId}`, JSON.stringify({ chapters, apus, metadata: updatedMeta }));
-    setProjects(prev => prev.map(p => p.id === activeProjectId ? updatedMeta : p));
-    setLastSaved(timestamp);
-    return true;
-  }, [activeProjectId, projects, chapters, apus]);
-
-  const moveChapter = useCallback((id: string, direction: 'up' | 'down') => {
-    setChapters(prev => {
-      const projChapters = prev.filter(c => c.projectId === activeProjectId);
-      const others = prev.filter(c => c.projectId !== activeProjectId);
-      const index = projChapters.findIndex(c => c.id === id);
-      const target = direction === 'up' ? index - 1 : index + 1;
-      if (target < 0 || target >= projChapters.length) return prev;
-      const newList = [...projChapters];
-      const temp = newList[index];
-      newList[index] = newList[target];
-      newList[target] = temp;
-      return [...others, ...newList];
-    });
-  }, [activeProjectId]);
-
-  const updateApu = (apu: APU) => setApus(prev => prev.map(a => a.id === apu.id ? apu : a));
-  const deleteChapter = (id: string) => setChapters(prev => prev.filter(c => c.id !== id));
-  const deleteApu = (id: string) => setApus(prev => prev.filter(a => a.id !== id));
-  const addChapter = (c: Chapter) => setChapters(prev => [...prev, c]);
-  const addHistoryItem = (i: HistoryItem) => setHistory(prev => [i, ...prev].slice(0, 500));
-  const deleteProject = (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    localStorage.removeItem(`${PROJECT_PREFIX}${id}`);
-    if (activeProjectId === id) setActiveProjectId(null);
-  };
-
-  return (
-    <AppContext.Provider 
-      value={{ 
-        projects, setProjects, chapters, apus, activeProjectId, setActiveProjectId, 
-        loadProject, saveActiveProject, moveChapter, updateApu, deleteChapter, deleteApu, 
-        addChapter, addHistoryItem, history, lastSaved, deleteProject 
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
-};
-
-export const useAppStore = () => {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useAppStore must be used within AppProvider');
-  return context;
-};
+  )
+);

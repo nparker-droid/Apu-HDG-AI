@@ -1,89 +1,130 @@
 import React, { useMemo } from 'react';
-import { DollarSign, TrendingUp, PieChart, FileText } from 'lucide-react';
+import { FileText, TrendingUp, DollarSign, PieChart } from 'lucide-react';
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
 
-const ProjectGeneralView: React.FC<{ project: Project; chapters: Chapter[]; apus: APU[] }> = ({ project, chapters, apus }) => {
+interface ProjectGeneralViewProps {
+  project: Project;
+  chapters: Chapter[];
+  apus: APU[];
+}
+
+const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapters, apus }) => {
   const budgetData = useMemo(() => {
-    let totalNeto = 0;
-    const projectChapters = chapters.filter(c => c.projectId === project.id);
-    const chaptersWithTotals = projectChapters.map(chapter => {
-      const chapterApus = apus.filter(a => a.chapterId === chapter.id).map(apu => {
-        const laws = Number(apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage) || 0;
-        const oh = Number(apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage) || 0;
-        const ut = Number(apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage) || 0;
-        const direct = Object.values(apu.items).flat().reduce((acc, i) => acc + (Number(i.total) || 0), 0);
-        const unitNeto = direct * (1 + (oh + ut) / 100);
-        const subtotal = unitNeto * (Number(apu.quantity) || 0);
-        return { ...apu, unitNeto, subtotal };
+    let totalNetoProyecto = 0;
+    const chaptersWithTotals = chapters
+      .filter(c => c && c.projectId === project.id)
+      .map(chapter => {
+        const chapterApus = apus
+          .filter(a => a && a.chapterId === chapter.id)
+          .map(apu => {
+            const laws = Number(apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage) || 0;
+            const overhead = Number(apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage) || 0;
+            const utility = Number(apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage) || 0;
+
+            const sMat = (apu.items[ItemCategory.MATERIAL] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+            const sMoB = (apu.items[ItemCategory.MANO_DE_OBRA] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+            const sMoBTotal = sMoB * (1 + laws / 100);
+            const sEq = (apu.items[ItemCategory.EQUIPO] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+            const sOt = (apu.items[ItemCategory.OTROS] || []).reduce((s, i) => s + (Number(i.total) || 0), 0);
+
+            const costoDirecto = sMat + sMoBTotal + sEq + sOt;
+            const unitarioNeto = costoDirecto * (1 + (overhead + utility) / 100);
+            const subtotal = unitarioNeto * (Number(apu.quantity) || 0);
+
+            return { ...apu, unitarioNeto, subtotal };
+          });
+
+        const totalChapter = chapterApus.reduce((s, a) => s + (Number(a.subtotal) || 0), 0);
+        totalNetoProyecto += totalChapter;
+
+        return { ...chapter, apus: chapterApus, totalChapter };
       });
-      const totalChapter = chapterApus.reduce((acc, a) => acc + a.subtotal, 0);
-      totalNeto += totalChapter;
-      return { ...chapter, apus: chapterApus, totalChapter };
-    });
-    return { chaptersWithTotals, totalNeto };
+
+    return { chaptersWithTotals, totalNetoProyecto };
   }, [project, chapters, apus]);
 
-  const fmtCurr = (v: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Math.round(v));
-  
-  const fmtQty = (v: any) => {
-    const num = Number(v);
-    if (isNaN(num)) return "0,0";
-    return new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(num);
+  const formatCLP = (val: any) => {
+    const num = Math.round(Number(val) || 0);
+    return new Intl.NumberFormat('es-CL', { 
+      style: 'currency', 
+      currency: 'CLP', 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 0 
+    }).format(num);
+  };
+
+  const formatQuantity = (val: any) => {
+    const num = Number(val) || 0;
+    return new Intl.NumberFormat('es-CL', { 
+      minimumFractionDigits: 1, 
+      maximumFractionDigits: 1 
+    }).format(num);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 p-4">
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><DollarSign size={16}/> <span className="text-[10px] font-bold uppercase">Neto</span></div>
-          <p className="text-2xl font-black text-[#004071]">{fmtCurr(budgetData.totalNeto)}</p>
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="flex items-center gap-3 mb-2 text-slate-400">
+            <DollarSign className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Total Neto</span>
+          </div>
+          <p className="text-3xl font-black text-[#004071]">{formatCLP(budgetData.totalNetoProyecto)}</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><TrendingUp size={16}/> <span className="text-[10px] font-bold uppercase">IVA (19%)</span></div>
-          <p className="text-2xl font-black text-slate-500">{fmtCurr(budgetData.totalNeto * 0.19)}</p>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="flex items-center gap-3 mb-2 text-slate-400">
+            <TrendingUp className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">IVA (19%)</span>
+          </div>
+          <p className="text-3xl font-black text-slate-500">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</p>
         </div>
-        <div className="bg-[#004071] p-6 rounded-2xl shadow-xl text-white">
-          <div className="flex items-center gap-2 mb-2 opacity-80"><PieChart size={16}/> <span className="text-[10px] font-bold uppercase">Total</span></div>
-          <p className="text-2xl font-black">{fmtCurr(budgetData.totalNeto * 1.19)}</p>
+
+        <div className="bg-[#004071] p-6 rounded-[2rem] shadow-xl text-white">
+          <div className="flex items-center gap-3 mb-2 opacity-80">
+            <PieChart className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Total Bruto</span>
+          </div>
+          <p className="text-3xl font-black">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-6 bg-slate-50/50 flex justify-between items-center border-b border-slate-100">
-          <h3 className="text-xs font-black text-[#004071] uppercase">Estructura de Costos</h3>
-          <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="flex items-center gap-2 bg-[#004071] text-white px-4 py-2 rounded-xl text-[10px] font-bold hover:bg-[#003056]">
-            <FileText size={14}/> EXPORTAR PDF
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-8 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+          <h3 className="text-sm font-black text-[#004071] uppercase tracking-tighter">Estructura de Costos del Proyecto</h3>
+          <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="flex items-center gap-2 bg-[#004071] text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-[#003056] transition-all">
+            <FileText className="w-4 h-4" /> Exportar PDF
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase">
-              <tr>
-                <th className="p-4">Ítem</th>
-                <th>Descripción</th>
-                <th className="text-center">Unid</th>
-                <th className="text-center">Cant</th>
-                <th className="text-right">P. Unitario</th>
-                <th className="p-4 text-right">Total</th>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-100/50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="px-8 py-4">Ítem</th>
+                <th className="px-8 py-4">Descripción de Partida</th>
+                <th className="px-8 py-4 text-center">Unidad</th>
+                <th className="px-8 py-4 text-center">Cant.</th>
+                <th className="px-8 py-4 text-right">P. Unitario</th>
+                <th className="px-8 py-4 text-right">Total Neto</th>
               </tr>
             </thead>
             <tbody>
-              {budgetData.chaptersWithTotals.map(ch => (
-                <React.Fragment key={ch.id}>
-                  <tr className="bg-slate-100/50 font-bold text-[#004071] text-xs">
-                    <td className="p-3">{ch.code}</td>
-                    <td colSpan={4}>{ch.name.toUpperCase()}</td>
-                    <td className="p-3 text-right">{fmtCurr(ch.totalChapter)}</td>
+              {budgetData.chaptersWithTotals.map(chapter => (
+                <React.Fragment key={chapter.id}>
+                  <tr className="bg-slate-50">
+                    <td className="px-8 py-3 font-black text-[#004071] text-xs">{chapter.code}</td>
+                    <td colSpan={4} className="px-8 py-3 font-black text-[#004071] text-xs uppercase">{chapter.name}</td>
+                    <td className="px-8 py-3 text-right font-black text-[#004071] text-xs">{formatCLP(chapter.totalChapter)}</td>
                   </tr>
-                  {ch.apus.map(a => (
-                    <tr key={a.id} className="text-[11px] border-b border-slate-50 text-slate-600">
-                      <td className="p-2 pl-4">{a.code}</td>
-                      <td>{a.name}</td>
-                      <td className="text-center">{a.unit}</td>
-                      <td className="text-center font-mono">{fmtQty(a.quantity)}</td>
-                      <td className="text-right font-mono">{fmtCurr(a.unitNeto)}</td>
-                      <td className="p-2 text-right font-bold text-slate-800">{fmtCurr(a.subtotal)}</td>
+                  {chapter.apus.map(apu => (
+                    <tr key={apu.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
+                      <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">{apu.code}</td>
+                      <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
+                      <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
+                      <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
+                      <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(apu.unitarioNeto)}</td>
+                      <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(apu.subtotal)}</td>
                     </tr>
                   ))}
                 </React.Fragment>
