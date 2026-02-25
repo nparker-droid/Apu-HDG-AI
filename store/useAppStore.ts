@@ -70,7 +70,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const target = direction === 'up' ? index - 1 : index + 1;
       if (target < 0 || target >= projChapters.length) return prev;
       const newList = [...projChapters];
-      [newList[index], newList[target]] = [newList[target], newList[index]];
+      const temp = newList[index];
+      newList[index] = newList[target];
+      newList[target] = temp;
       return [...others, ...newList];
     });
   }, [activeProjectId]);
@@ -87,11 +89,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   return (
-    <AppContext.Provider value={{ 
-      projects, setProjects, chapters, apus, activeProjectId, setActiveProjectId, 
-      loadProject, saveActiveProject, moveChapter, updateApu, deleteChapter, deleteApu, 
-      addChapter, addHistoryItem, history, lastSaved, deleteProject 
-    }}>
+    <AppContext.Provider 
+      value={{ 
+        projects, setProjects, chapters, apus, activeProjectId, setActiveProjectId, 
+        loadProject, saveActiveProject, moveChapter, updateApu, deleteChapter, deleteApu, 
+        addChapter, addHistoryItem, history, lastSaved, deleteProject 
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

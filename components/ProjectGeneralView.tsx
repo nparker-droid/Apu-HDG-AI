@@ -25,7 +25,12 @@ const ProjectGeneralView: React.FC<{ project: Project; chapters: Chapter[]; apus
   }, [project, chapters, apus]);
 
   const fmtCurr = (v: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Math.round(v));
-  const fmtQty = (v: any) => new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(v) || 0);
+  
+  const fmtQty = (v: any) => {
+    const num = Number(v);
+    if (isNaN(num)) return "0,0";
+    return new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(num);
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 p-4">
@@ -51,25 +56,41 @@ const ProjectGeneralView: React.FC<{ project: Project; chapters: Chapter[]; apus
             <FileText size={14}/> EXPORTAR PDF
           </button>
         </div>
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase">
-            <tr><th className="p-4">Ítem</th><th>Descripción</th><th className="text-center">Unid</th><th className="text-center">Cant</th><th className="text-right">P. Unitario</th><th className="p-4 text-right">Total</th></tr>
-          </thead>
-          <tbody>
-            {budgetData.chaptersWithTotals.map(ch => (
-              <React.Fragment key={ch.id}>
-                <tr className="bg-slate-100/50 font-bold text-[#004071] text-xs">
-                  <td className="p-3">{ch.code}</td><td colSpan={4}>{ch.name.toUpperCase()}</td><td className="p-3 text-right">{fmtCurr(ch.totalChapter)}</td>
-                </tr>
-                {ch.apus.map(a => (
-                  <tr key={a.id} className="text-[11px] border-b border-slate-50 text-slate-600">
-                    <td className="p-2 pl-4">{a.code}</td><td>{a.name}</td><td className="text-center">{a.unit}</td><td className="text-center font-mono">{fmtQty(a.quantity)}</td><td className="text-right font-mono">{fmtCurr(a.unitNeto)}</td><td className="p-2 text-right font-bold text-slate-800">{fmtCurr(a.subtotal)}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase">
+              <tr>
+                <th className="p-4">Ítem</th>
+                <th>Descripción</th>
+                <th className="text-center">Unid</th>
+                <th className="text-center">Cant</th>
+                <th className="text-right">P. Unitario</th>
+                <th className="p-4 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {budgetData.chaptersWithTotals.map(ch => (
+                <React.Fragment key={ch.id}>
+                  <tr className="bg-slate-100/50 font-bold text-[#004071] text-xs">
+                    <td className="p-3">{ch.code}</td>
+                    <td colSpan={4}>{ch.name.toUpperCase()}</td>
+                    <td className="p-3 text-right">{fmtCurr(ch.totalChapter)}</td>
                   </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+                  {ch.apus.map(a => (
+                    <tr key={a.id} className="text-[11px] border-b border-slate-50 text-slate-600">
+                      <td className="p-2 pl-4">{a.code}</td>
+                      <td>{a.name}</td>
+                      <td className="text-center">{a.unit}</td>
+                      <td className="text-center font-mono">{fmtQty(a.quantity)}</td>
+                      <td className="text-right font-mono">{fmtCurr(a.unitNeto)}</td>
+                      <td className="p-2 text-right font-bold text-slate-800">{fmtCurr(a.subtotal)}</td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
