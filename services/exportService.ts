@@ -7,8 +7,8 @@ const getJsPDF = () => {
   return g.jspdf ? g.jspdf.jsPDF : null;
 };
 
-const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
-const formatNum = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+export const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
+const formatNum = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export const formatUnit = (unit: string) => {
   if (!unit) return '';
@@ -67,16 +67,16 @@ const calculateTotals = (apu: APU, project: Project) => {
   const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
   const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
   const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
-  
+
   const factorIndirectos = 1 + (overhead + utility) / 100;
   const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
   const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
   const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
   const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
-  
+
   const costoDirecto = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
   const precioUnitarioNeto = costoDirecto * factorIndirectos;
-  
+
   return { costoDirecto, precioUnitarioNeto, factorIndirectos, laws, overhead, utility };
 };
 
@@ -115,14 +115,14 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.text(`CAPÍTULO ${chapter.code}: ${chapter.name.toUpperCase()}`, 14, currentY + 8);
-      
+
       doc.setTextColor(40, 40, 40);
       doc.setFontSize(11);
       doc.text(`PARTIDA ${apu.code}: ${apu.name.toUpperCase()}`, 14, currentY + 15);
-      
+
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNum(apu.quantity.toFixed(1))}`, 14, currentY + 20);
+      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNum(apu.quantity)}`, 14, currentY + 20);
 
       currentY += 25;
 
@@ -134,10 +134,10 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
           startY: currentY,
           head: [[cat.toUpperCase(), 'UNID.', cat === ItemCategory.MANO_DE_OBRA ? 'REND.' : 'CANT.', 'P. UNITARIO', 'TOTAL']],
           body: items.map(i => [
-            i.description, 
-            formatUnit(i.unit), 
-            formatNum(cat === ItemCategory.MANO_DE_OBRA ? (i.performance || 0) : i.quantity), 
-            formatCLP(i.unitPrice), 
+            i.description,
+            formatUnit(i.unit),
+            formatNum(cat === ItemCategory.MANO_DE_OBRA ? (i.performance || 0) : i.quantity),
+            formatCLP(i.unitPrice),
             formatCLP(i.total)
           ]),
           theme: 'grid',
@@ -158,17 +158,17 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
-      
+
       doc.text(`COSTO DIRECTO UNITARIO:`, 120, currentY + 5);
       doc.text(formatCLP(stats.costoDirecto), 196, currentY + 5, { align: 'right' });
-      
+
       doc.setFont('helvetica', 'normal');
       doc.text(`GASTOS GENERALES (${stats.overhead}%):`, 120, currentY + 10);
       doc.text(formatCLP(stats.costoDirecto * (stats.overhead / 100)), 196, currentY + 10, { align: 'right' });
-      
+
       doc.text(`UTILIDAD (${stats.utility}%):`, 120, currentY + 15);
       doc.text(formatCLP(stats.costoDirecto * (stats.utility / 100)), 196, currentY + 15, { align: 'right' });
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(`PRECIO UNITARIO NETO:`, 120, currentY + 22);
@@ -179,7 +179,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setDrawColor(230, 230, 230);
       doc.setLineWidth(0.1);
       doc.rect(12, startY + 2, 186, currentY - startY - 2);
-      
+
       currentY += 10;
     });
   });
@@ -252,7 +252,7 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
   doc.setTextColor(100, 100, 100);
   doc.text('SUBTOTAL NETO:', startX + 2, finalY + 7);
   doc.text('IVA (19%):', startX + 2, finalY + 14);
-  
+
   doc.setFontSize(9);
   doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
   doc.setFont('helvetica', 'bold');
@@ -262,7 +262,7 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
   doc.setFont('helvetica', 'normal');
   doc.text(formatCLP(totalNetoProyecto), 194, finalY + 7, { align: 'right' });
   doc.text(formatCLP(totalNetoProyecto * 0.19), 194, finalY + 14, { align: 'right' });
-  
+
   doc.setFont('helvetica', 'bold');
   doc.text(formatCLP(totalNetoProyecto * 1.19), 194, finalY + 22, { align: 'right' });
 

@@ -3,7 +3,7 @@ import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, Clipboard
 import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
 import { getDeviationReasoning, getFieldSuggestion } from '../services/geminiService';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
-import { formatUnit } from '../services/exportService';
+import { formatUnit, formatCLP } from '../services/exportService';
 
 interface SectionTableProps {
   category: ItemCategory;
@@ -24,14 +24,14 @@ interface DeviationAlert {
   isAiSuggestion?: boolean;
 }
 
-const SectionTable: React.FC<SectionTableProps> = ({ 
-  category, 
-  items, 
-  onChange, 
-  history, 
-  apuContext, 
+const SectionTable: React.FC<SectionTableProps> = ({
+  category,
+  items,
+  onChange,
+  history,
+  apuContext,
   chapterName,
-  onRegisterResource 
+  onRegisterResource
 }) => {
   const [showHistoryForIdx, setShowHistoryForIdx] = useState<number | null>(null);
   const [activeAlert, setActiveAlert] = useState<DeviationAlert | null>(null);
@@ -76,11 +76,11 @@ const SectionTable: React.FC<SectionTableProps> = ({
 
   const filteredHistory = useMemo(() => {
     if (showHistoryForIdx === null || !items || !items[showHistoryForIdx]) return [];
-    
+
     const currentInput = (items[showHistoryForIdx].description || '').toLowerCase().trim();
     const safeHistory = (history || []).filter(h => h && h.category === category);
     const combinedHistory = [...safeHistory, ...libraryItems];
-    
+
     const uniqueHistoryMap = new Map<string, HistoryItem>();
     combinedHistory.forEach(item => {
       if (item && item.description) {
@@ -88,7 +88,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
         if (!uniqueHistoryMap.has(key)) uniqueHistoryMap.set(key, item);
       }
     });
-    
+
     const uniqueHistory = Array.from(uniqueHistoryMap.values());
     if (!currentInput) return uniqueHistory.slice(0, 10);
 
@@ -108,11 +108,11 @@ const SectionTable: React.FC<SectionTableProps> = ({
     if (!items || !items[index]) return;
     const newItems = [...items];
     const item = { ...newItems[index], [field]: value };
-    
+
     const p = parseFloat(String(item.performance ?? 0)) || 0;
     const up = parseFloat(String(item.unitPrice ?? 0)) || 0;
     const q = parseFloat(String(item.quantity ?? 0)) || 0;
-    
+
     item.total = category === ItemCategory.MANO_DE_OBRA ? p * up : q * up;
     newItems[index] = item;
     onChange(newItems);
@@ -141,11 +141,11 @@ const SectionTable: React.FC<SectionTableProps> = ({
 
     const values = matches.map(h => field === 'unitPrice' ? Number(h.unitPrice) : (Number(h.performance) || 0)).filter(v => v > 0);
     if (values.length === 0) return;
-    
+
     const avg = values.reduce((acc, curr) => acc + curr, 0) / values.length;
     const userVal = Number(item[field]);
     if (isNaN(userVal) || avg === 0) return;
-    
+
     const deviation = Math.abs(userVal - avg) / avg;
     if (deviation > 0.25) {
       setActiveAlert({ itemId: item.id, field, avgValue: avg, reasoning: 'Analizando...', isLoading: true });
@@ -168,7 +168,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
             <th className="pb-1 pl-4">Recurso</th>
             <th className="pb-1 text-center w-20">Unid.</th>
             <th className="pb-1 text-right w-36">{isLabor ? 'Rend.' : 'Cant.'}</th>
-            <th className="pb-1 text-right w-40">P. Unit.</th>
+            <th className="pb-1 text-right w-40">P. Unit. ($)</th>
             <th className="pb-1 text-right w-32 pr-4">Total</th>
             <th className="pb-1 w-10"></th>
           </tr>
@@ -177,22 +177,22 @@ const SectionTable: React.FC<SectionTableProps> = ({
           {items.map((item, idx) => (
             <tr key={item.id} className="group bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all">
               <td className="py-3 pl-4 relative">
-                <input 
-                  type="text" 
-                  value={item.description || ''} 
+                <input
+                  type="text"
+                  value={item.description || ''}
                   onChange={e => {
                     updateItem(idx, 'description', e.target.value);
                     setShowHistoryForIdx(e.target.value.length > 0 ? idx : null);
                   }}
                   onFocus={() => item.description && setShowHistoryForIdx(idx)}
                   onBlur={() => handleBlurItem(idx)}
-                  className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700" 
+                  className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700"
                   placeholder="Descripción..."
                 />
                 {showHistoryForIdx === idx && filteredHistory.length > 0 && (
                   <div className="absolute z-[100] left-0 top-full mt-2 w-full min-w-[320px] bg-white border border-slate-200 shadow-2xl rounded-[1.5rem] p-3">
                     {filteredHistory.map((h, hIdx) => (
-                      <button 
+                      <button
                         key={`${h.description}-${hIdx}`}
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => {
@@ -212,23 +212,26 @@ const SectionTable: React.FC<SectionTableProps> = ({
               </td>
               <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} className="w-full text-center bg-transparent border-none text-xs font-bold text-slate-400 uppercase" /></td>
               <td className="px-2">
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="0.1"
-                  value={(Number(isLabor ? item.performance : item.quantity) || 0).toFixed(1)} 
+                  value={(Number(isLabor ? item.performance : item.quantity) || 0).toFixed(1)}
                   onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', parseFloat(e.target.value) || 0)}
                   onBlur={() => { checkDeviation(item, 'performance'); handleBlurItem(idx); }}
                   className="w-full text-right bg-transparent border-none font-mono text-sm font-black text-[#88C13E]"
                 />
               </td>
               <td className="px-2">
-                <input 
-                  type="number" 
-                  value={Number(item.unitPrice) || 0} 
-                  onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                  onBlur={() => { checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
-                  className="w-full text-right bg-transparent border-none font-mono text-sm font-black text-slate-600"
-                />
+                <div className="flex items-center justify-end gap-1 px-2 py-1 bg-slate-50/50 rounded-lg group-hover:bg-white transition-colors border border-transparent group-hover:border-slate-100">
+                  <span className="text-[10px] text-slate-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    value={Number(item.unitPrice) || 0}
+                    onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                    onBlur={() => { checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
+                    className="w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black text-slate-600 p-0"
+                  />
+                </div>
               </td>
               <td className="text-right pr-4 font-mono text-sm font-black text-[#004071]">${Math.round(Number(item.total) || 0).toLocaleString('es-CL')}</td>
               <td><button onClick={() => onChange(items.filter(i => i.id !== item.id))} className="p-2 text-slate-200 hover:text-red-500"><Trash2 className="w-4 h-4" /></button></td>
