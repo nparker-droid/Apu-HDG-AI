@@ -28,6 +28,13 @@ export const useAppStore = () => {
     localStorage.setItem('apu_history', JSON.stringify(history));
   }, [history]);
 
+  // Autograbado reactivo cuando cambian los datos del proyecto activo
+  useEffect(() => {
+    if (activeProjectId) {
+      saveActiveProject();
+    }
+  }, [chapters, apus, activeProjectId]);
+
   const loadProject = useCallback((id: string) => {
     const dataKey = `${PROJECT_PREFIX}${id}`;
     const savedData = localStorage.getItem(dataKey);

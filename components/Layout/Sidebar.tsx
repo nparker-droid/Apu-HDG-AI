@@ -43,6 +43,7 @@ interface SidebarProps {
     handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onDeleteProject: (id: string) => void;
     onDuplicateProject: (id: string) => void;
+    moveApu: (id: string, dir: 'up' | 'down') => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -106,10 +107,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <Upload className="w-3 h-3" /> Importar
                     <input type="file" accept=".json" onChange={handleImport} className="hidden" />
                 </label>
-                <button 
-                  disabled={!activeProject} 
-                  onClick={() => activeProject && onShareProject(activeProject)}
-                  className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black py-3 rounded-2xl transition-all uppercase tracking-widest text-[8px] disabled:opacity-50"
+                <button
+                    disabled={!activeProject}
+                    onClick={() => activeProject && onShareProject(activeProject)}
+                    className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black py-3 rounded-2xl transition-all uppercase tracking-widest text-[8px] disabled:opacity-50"
                 >
                     <Share2 className="w-3 h-3" /> Backup
                 </button>
@@ -136,12 +137,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <div className="flex items-center gap-1 opacity-0 group-hover/project:opacity-100 transition-opacity">
                                 <button onClick={(e) => { e.stopPropagation(); onEditProject(project); }} title="Renombrar/Editar" className="p-1 hover:text-[#D9E021]"><Edit3 className="w-3 h-3" /></button>
                                 <button onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); }} title="Duplicar" className="p-1 hover:text-[#D9E021]"><Copy className="w-3 h-3" /></button>
-                                <button 
-                                    onClick={(e) => { 
-                                        e.stopPropagation(); 
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
                                         setConfirmDelete({ type: 'project', id: project.id, name: project.name });
-                                    }} 
-                                    title="Eliminar Proyecto" 
+                                    }}
+                                    title="Eliminar Proyecto"
                                     className="p-1 hover:text-red-400"
                                 >
                                     <Trash2 className="w-3 h-3" />
@@ -166,11 +167,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     <button onClick={() => moveChapter(chapter.id, 'down')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronDown className="w-3 h-3" /></button>
                                                     <button onClick={() => onCreateApu(project.id, chapter.id)} className="text-[#004071] hover:text-[#88C13E] p-0.5"><Plus className="w-3 h-3" /></button>
                                                     <button onClick={() => onLibraryOpen(chapter.id)} className="text-[#88C13E] hover:text-[#004071] p-0.5"><BookOpen className="w-3 h-3" /></button>
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setConfirmDelete({ type: 'chapter', id: chapter.id, name: chapter.name });
-                                                        }} 
+                                                        }}
                                                         className="text-slate-200 hover:text-red-500 p-0.5"
                                                     >
                                                         <Trash2 className="w-3 h-3" />
@@ -179,7 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            {apus.filter(a => a.chapterId === chapter.id).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })).map(apu => (
+                                            {apus.filter(a => a.chapterId === chapter.id).map(apu => (
                                                 <div
                                                     key={apu.id}
                                                     onClick={() => setCurrentApuId(apu.id)}
@@ -189,13 +190,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     )}
                                                 >
                                                     <span className="truncate pr-2 font-bold">{apu.code} {apu.name}</span>
-                                                    <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity">
+                                                    <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
+                                                        <div className="flex flex-col mr-1">
+                                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                                        </div>
                                                         <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-[#004071]"><Copy className="w-3 h-3" /></button>
-                                                        <button 
+                                                        <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
-                                                            }} 
+                                                            }}
                                                             className="p-1 hover:text-red-600"
                                                         >
                                                             <Trash2 className="w-3 h-3" />
