@@ -28,12 +28,20 @@ export const useAppStore = () => {
     localStorage.setItem('apu_history', JSON.stringify(history));
   }, [history]);
 
-  // Autograbado reactivo cuando cambian los datos del proyecto activo
+  // Save active project whenever it changes
   useEffect(() => {
     if (activeProjectId) {
-      saveActiveProject();
+      const activeProjectMeta = projects.find(p => p.id === activeProjectId);
+      if (activeProjectMeta) {
+        const projectData = {
+          chapters,
+          apus,
+          metadata: activeProjectMeta
+        };
+        localStorage.setItem(`${PROJECT_PREFIX}${activeProjectId}`, JSON.stringify(projectData));
+      }
     }
-  }, [chapters, apus, activeProjectId]);
+  }, [chapters, apus, activeProjectId, projects]);
 
   const loadProject = useCallback((id: string) => {
     const dataKey = `${PROJECT_PREFIX}${id}`;
@@ -41,10 +49,11 @@ export const useAppStore = () => {
 
     if (savedData) {
       const parsed = JSON.parse(savedData);
+      // We don't setProjects here to avoid trigger the save effect immediately
       setChapters(parsed.chapters || []);
       setApus(parsed.apus || []);
       setActiveProjectId(id);
-      setLastSaved(parsed.metadata?.updatedAt || null);
+      setLastSaved(parsed.metadata?.updatedAt || Date.now());
     } else {
       setChapters([]);
       setApus([]);
@@ -56,20 +65,17 @@ export const useAppStore = () => {
   const saveActiveProject = useCallback(() => {
     if (!activeProjectId) return null;
     const timestamp = Date.now();
-    const activeProjectMeta = projects.find(p => p.id === activeProjectId);
-    if (!activeProjectMeta) return null;
 
-    const updatedMeta = { ...activeProjectMeta, updatedAt: timestamp };
-    const projectData = {
-      chapters,
-      apus,
-      metadata: updatedMeta
-    };
-    localStorage.setItem(`${PROJECT_PREFIX}${activeProjectId}`, JSON.stringify(projectData));
-    setProjects(prev => prev.map(p => p.id === activeProjectId ? updatedMeta : p));
+    setProjects(prev => prev.map(p => {
+      if (p.id === activeProjectId) {
+        return { ...p, updatedAt: timestamp };
+      }
+      return p;
+    }));
+
     setLastSaved(timestamp);
     return timestamp;
-  }, [activeProjectId, projects, chapters, apus]);
+  }, [activeProjectId]);
 
   const deleteProject = useCallback((id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id));
@@ -117,22 +123,26 @@ export const useAppStore = () => {
 
   const moveChapter = useCallback((chapterId: string, direction: 'up' | 'down') => {
     setChapters(prev => {
-      // Filtrar solo capítulos del proyecto actual para el movimiento
-      const otherProjectsChapters = prev.filter(c => c.projectId !== activeProjectId);
-      const currentProjectChapters = prev.filter(c => c.projectId === activeProjectId);
+      const idx = prev.findIndex(c => c.id === chapterId);
+      if (idx === -1) return prev;
 
-      const currentIndex = currentProjectChapters.findIndex(c => c.id === chapterId);
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      const newChapters = [...prev];
+      const findNextIdx = () => {
+        let current = direction === 'up' ? idx - 1 : idx + 1;
+        while (current >= 0 && current < newChapters.length) {
+          if (newChapters[current].projectId === prev[idx].projectId) return current;
+          current += direction === 'up' ? -1 : 1;
+        }
+        return -1;
+      };
 
-      if (targetIndex < 0 || targetIndex >= currentProjectChapters.length) return prev;
+      const targetIdx = findNextIdx();
+      if (targetIdx === -1) return prev;
 
-      const newCurrentProjectChapters = [...currentProjectChapters];
-      const [movedItem] = newCurrentProjectChapters.splice(currentIndex, 1);
-      newCurrentProjectChapters.splice(targetIndex, 0, movedItem);
-
-      return [...otherProjectsChapters, ...newCurrentProjectChapters];
+      [newChapters[idx], newChapters[targetIdx]] = [newChapters[targetIdx], newChapters[idx]];
+      return newChapters;
     });
-  }, [activeProjectId]);
+  }, []);
 
   const deleteChapter = useCallback((id: string) => {
     setChapters(prev => prev.filter(c => c.id !== id));
@@ -140,11 +150,11 @@ export const useAppStore = () => {
   }, []);
 
   const addApu = useCallback((apu: APU) => {
-    setApus(prev => [...prev, apu]);
+    setApus(prev => [...prev, { ...apu, createdAt: Date.now() }]);
   }, []);
 
   const updateApu = useCallback((updatedApu: APU) => {
-    setApus(prev => prev.map(a => a.id === updatedApu.id ? updatedApu : a));
+    setApus(prev => prev.map(a => a.id === updatedApu.id ? { ...updatedApu, updatedAt: Date.now() } : a));
   }, []);
 
   const deleteApu = useCallback((id: string) => {
@@ -162,22 +172,24 @@ export const useAppStore = () => {
 
   const moveApu = useCallback((apuId: string, direction: 'up' | 'down') => {
     setApus(prev => {
-      const apu = prev.find(a => a.id === apuId);
-      if (!apu) return prev;
+      const idx = prev.findIndex(a => a.id === apuId);
+      if (idx === -1) return prev;
 
-      const otherApus = prev.filter(a => a.chapterId !== apu.chapterId);
-      const chapterApus = prev.filter(a => a.chapterId === apu.chapterId);
+      const newApus = [...prev];
+      const findNextIdx = () => {
+        let current = direction === 'up' ? idx - 1 : idx + 1;
+        while (current >= 0 && current < newApus.length) {
+          if (newApus[current].chapterId === prev[idx].chapterId) return current;
+          current += direction === 'up' ? -1 : 1;
+        }
+        return -1;
+      };
 
-      const currentIndex = chapterApus.findIndex(a => a.id === apuId);
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      const targetIdx = findNextIdx();
+      if (targetIdx === -1) return prev;
 
-      if (targetIndex < 0 || targetIndex >= chapterApus.length) return prev;
-
-      const newChapterApus = [...chapterApus];
-      const [movedItem] = newChapterApus.splice(currentIndex, 1);
-      newChapterApus.splice(targetIndex, 0, movedItem);
-
-      return [...otherApus, ...newChapterApus];
+      [newApus[idx], newApus[targetIdx]] = [newApus[targetIdx], newApus[idx]];
+      return newApus;
     });
   }, []);
 

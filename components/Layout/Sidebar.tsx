@@ -54,7 +54,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     onNewProject, onEditProject, onNewChapter,
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onShareProject, handleImport,
-    onDeleteProject, onDuplicateProject
+    onDeleteProject, onDuplicateProject,
+    moveApu
 }) => {
     const activeProject = projects.find(p => p.id === currentProjectId);
 

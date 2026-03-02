@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const {
     projects, setProjects,
     chapters, setChapters, addChapter, moveChapter, deleteChapter,
-    apus, setApus, updateApu, deleteApu,
+    apus, setApus, updateApu, deleteApu, moveApu,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved
