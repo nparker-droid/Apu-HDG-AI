@@ -31,6 +31,8 @@ export interface APU {
   socialLawsPercentage: number;
   overheadPercentage: number;
   utilityPercentage: number;
+  divideUnitPrice?: boolean;
+  divisorQuantity?: number;
   createdAt: number;
 }
 

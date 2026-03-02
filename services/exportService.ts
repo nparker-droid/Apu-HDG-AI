@@ -69,16 +69,20 @@ const calculateTotals = (apu: APU, project: Project) => {
   const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
   const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
 
-  const factorIndirectos = 1 + (overhead + utility) / 100;
   const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
   const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
   const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
   const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
 
-  const costoDirecto = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
-  const precioUnitarioNeto = costoDirecto * factorIndirectos;
+  const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
+  const factorIndirectos = 1 + (overhead + utility) / 100;
+  const costoNetoTotal = costoDirectoTotal * factorIndirectos;
 
-  return { costoDirecto, precioUnitarioNeto, factorIndirectos, laws, overhead, utility };
+  const precioUnitarioNeto = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
+    ? costoNetoTotal / (apu.divisorQuantity || 1)
+    : costoNetoTotal;
+
+  return { costoDirecto: costoDirectoTotal, precioUnitarioNeto, factorIndirectos, laws, overhead, utility };
 };
 
 export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: APU[]) => {
@@ -170,9 +174,13 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.text(`UTILIDAD (${stats.utility}%):`, 120, currentY + 15);
       doc.text(formatCLP(stats.costoDirecto * (stats.utility / 100)), 196, currentY + 15, { align: 'right' });
 
+      const unitPriceLabel = apu.divideUnitPrice
+        ? `P.U. NETO (por ${apu.divisorQuantity || 1} ${formatUnit(apu.unit)}):`
+        : `PRECIO UNITARIO NETO:`;
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text(`PRECIO UNITARIO NETO:`, 120, currentY + 22);
+      doc.text(unitPriceLabel, 120, currentY + 22);
       doc.text(formatCLP(stats.precioUnitarioNeto), 196, currentY + 22, { align: 'right' });
 
       currentY += 28;

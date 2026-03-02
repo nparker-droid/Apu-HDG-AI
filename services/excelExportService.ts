@@ -40,7 +40,7 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
     sortedChapters.forEach(chap => {
         // Fila de Capítulo
         budgetRows.push([chap.code, chap.name.toUpperCase(), "", "", "", ""]);
-        
+
         const chapApus = apus
             .filter(a => a.chapterId === chap.id)
             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
@@ -49,7 +49,7 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
             const stats = calculateApuTotals(apu, project);
             const totalPartida = stats.precioUnitarioNeto * apu.quantity;
             grandTotalNeto += totalPartida;
-            
+
             budgetRows.push([
                 apu.code,
                 apu.name,
@@ -71,7 +71,7 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
     );
 
     const wsBudget = XLSX.utils.aoa_to_sheet(budgetRows);
-    
+
     // Configurar anchos de columna para Presupuesto
     wsBudget['!cols'] = [
         { wch: 10 }, // Ítem
@@ -135,11 +135,15 @@ const createApuWorksheet = (apu: APU, project: Project) => {
     });
 
     // Bloque de cierre de APU
+    const unitPriceRowLabel = apu.divideUnitPrice
+        ? `PRECIO UNITARIO NETO (por ${apu.divisorQuantity || 1} ${apu.unit})`
+        : "PRECIO UNITARIO NETO";
+
     apuRows.push(
         ["", "COSTO DIRECTO UNITARIO", "", "", "", numCell(stats.costoDirecto)],
         ["", `GASTOS GENERALES (${stats.overhead}%)`, "", "", "", numCell(stats.costoDirecto * stats.overhead / 100)],
         ["", `UTILIDAD (${stats.utility}%)`, "", "", "", numCell(stats.costoDirecto * stats.utility / 100)],
-        ["", "PRECIO UNITARIO NETO", "", "", "", numCell(stats.precioUnitarioNeto)]
+        ["", unitPriceRowLabel, "", "", "", numCell(stats.precioUnitarioNeto)]
     );
 
     const wsApu = XLSX.utils.aoa_to_sheet(apuRows);
@@ -155,18 +159,22 @@ const createApuWorksheet = (apu: APU, project: Project) => {
 };
 
 const calculateApuTotals = (apu: APU, project: Project) => {
-  const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
-  const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
-  const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
-  
-  const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
-  const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
-  const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
-  const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
-  
-  const costoDirecto = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
-  const factorIndirectos = 1 + (overhead + utility) / 100;
-  const precioUnitarioNeto = costoDirecto * factorIndirectos;
-  
-  return { costoDirecto, precioUnitarioNeto, overhead, utility };
+    const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
+    const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
+    const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
+
+    const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
+    const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
+    const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
+    const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
+
+    const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
+    const factorIndirectos = 1 + (overhead + utility) / 100;
+    const costoNetoTotal = costoDirectoTotal * factorIndirectos;
+
+    const precioUnitarioNeto = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
+        ? costoNetoTotal / (apu.divisorQuantity || 1)
+        : costoNetoTotal;
+
+    return { costoDirecto: costoDirectoTotal, precioUnitarioNeto, overhead, utility };
 };
