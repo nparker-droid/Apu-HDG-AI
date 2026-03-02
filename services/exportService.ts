@@ -96,14 +96,14 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
 
   const projectChapters = chapters
     .filter(c => c.projectId === project.id)
-    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-  projectChapters.forEach((chapter) => {
+  projectChapters.forEach((chapter, cIdx) => {
+    const chapterNumber = cIdx + 1;
     const chapterApus = apus
-      .filter(a => a.chapterId === chapter.id)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+      .filter(a => a.chapterId === chapter.id);
 
-    chapterApus.forEach((apu) => {
+    chapterApus.forEach((apu, aIdx) => {
+      const apuNumber = `${chapterNumber}.${aIdx + 1}`;
       const stats = calculateTotals(apu, project);
       const totalRows = Object.values(apu.items).flat().length;
       const estimatedHeight = 50 + (totalRows * 7) + 25;
@@ -119,11 +119,11 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
-      doc.text(`CAPÍTULO ${chapter.code}: ${chapter.name.toUpperCase()}`, 14, currentY + 8);
+      doc.text(`CAPÍTULO ${chapterNumber}: ${chapter.name.toUpperCase()}`, 14, currentY + 8);
 
       doc.setTextColor(40, 40, 40);
       doc.setFontSize(11);
-      doc.text(`PARTIDA ${apu.code}: ${apu.name.toUpperCase()}`, 14, currentY + 15);
+      doc.text(`PARTIDA ${apuNumber}: ${apu.name.toUpperCase()}`, 14, currentY + 15);
 
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
@@ -181,7 +181,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(unitPriceLabel, 120, currentY + 22);
-      doc.text(formatCLP(stats.precioUnitarioNeto), 196, currentY + 22, { align: 'right' });
+      doc.text(formatCLP(stats.precioUnitarioNeto * apu.quantity), 196, currentY + 22, { align: 'right' });
 
       currentY += 28;
 
@@ -209,26 +209,26 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
 
   const projectChapters = chapters
     .filter(c => c.projectId === project.id)
-    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-  projectChapters.forEach(chap => {
+  projectChapters.forEach((chap, cIdx) => {
+    const chapterNumber = cIdx + 1;
     const chapApus = apus
-      .filter(a => a.chapterId === chap.id)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+      .filter(a => a.chapterId === chap.id);
 
     if (chapApus.length === 0) return;
 
-    const rows = chapApus.map(apu => {
+    const rows = chapApus.map((apu, aIdx) => {
+      const apuNumber = `${chapterNumber}.${aIdx + 1}`;
       const stats = calculateTotals(apu, project);
       const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
       totalNetoProyecto += subtotalPartida;
-      return [apu.code, apu.name, formatUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
+      return [apuNumber, apu.name, formatUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
     });
 
     (doc as any).autoTable({
       startY: currentY,
       head: [
-        [{ content: `${chap.code}. ${chap.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', halign: 'left' } }],
+        [{ content: `${chapterNumber}. ${chap.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', halign: 'left' } }],
         ['CÓD.', 'DESCRIPCIÓN', 'UNID.', 'CANT.', 'P. UNIT. NETO', 'TOTAL NETO']
       ],
       body: rows,

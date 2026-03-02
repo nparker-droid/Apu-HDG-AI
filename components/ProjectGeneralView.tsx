@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { FileText, TrendingUp, DollarSign, PieChart } from 'lucide-react';
+import { FileText, TrendingUp, DollarSign, PieChart, ChevronUp, ChevronDown } from 'lucide-react';
+import { useAppStore } from '../store/useAppStore';
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
 
@@ -10,6 +11,7 @@ interface ProjectGeneralViewProps {
 }
 
 const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapters, apus }) => {
+  const { moveChapter, moveApu } = useAppStore();
   const budgetData = useMemo(() => {
     let totalNetoProyecto = 0;
     const chaptersWithTotals = chapters
@@ -28,14 +30,19 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
             const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
             const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
 
-            const costoDirecto = sMat + sMoBTotal + sEq + sOt;
-            const unitarioNeto = costoDirecto * (1 + (overhead + utility) / 100);
-            const subtotal = unitarioNeto * (Number(apu.quantity) || 0);
+            const costoDirectoTotal = sMat + sMoBTotal + sEq + sOt;
+            const unitarioNeto = costoDirectoTotal * (1 + (overhead + utility) / 100);
 
-            return { ...apu, unitarioNeto, subtotal };
+            const displayPU = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
+              ? unitarioNeto / (apu.divisorQuantity || 1)
+              : unitarioNeto;
+
+            const subtotal = displayPU * (Number(apu.quantity) || 0);
+
+            return { ...apu, displayPU, subtotal };
           });
 
-        const totalChapter = chapterApus.reduce((s, a) => s + a.subtotal, 0);
+        const totalChapter = chapterApus.reduce((s, a) => s + (a as any).subtotal, 0);
         totalNetoProyecto += totalChapter;
 
         return { ...chapter, apus: chapterApus, totalChapter };
@@ -45,20 +52,20 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   }, [project, chapters, apus]);
 
   const formatCLP = (val: number) => {
-    return new Intl.NumberFormat('es-CL', { 
-      style: 'currency', 
-      currency: 'CLP', 
-      minimumFractionDigits: 0, 
-      maximumFractionDigits: 0 
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(Math.round(val));
   };
 
   // FORMATEADOR SEGURO A 1 DECIMAL
   const formatQuantity = (val: any) => {
     const numericVal = Number(val) || 0;
-    return new Intl.NumberFormat('es-CL', { 
-      minimumFractionDigits: 1, 
-      maximumFractionDigits: 1 
+    return new Intl.NumberFormat('es-CL', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
     }).format(numericVal);
   };
 
@@ -110,23 +117,64 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
               </tr>
             </thead>
             <tbody>
-              {budgetData.chaptersWithTotals.map(chapter => (
+              {budgetData.chaptersWithTotals.map((chapter, cIdx) => (
                 <React.Fragment key={chapter.id}>
                   <tr className="bg-slate-50">
-                    <td className="px-8 py-3 font-black text-[#004071] text-xs">{chapter.code}</td>
+                    <td className="px-8 py-3 font-black text-[#004071] text-xs">
+                      <div className="flex items-center gap-2">
+                        <span>{cIdx + 1}</span>
+                        <div className="flex flex-col">
+                          <button onClick={() => moveChapter(chapter.id, 'up')} className="hover:text-blue-600 outline-none"><ChevronUp className="w-2.5 h-2.5" /></button>
+                          <button onClick={() => moveChapter(chapter.id, 'down')} className="hover:text-blue-600 outline-none"><ChevronDown className="w-2.5 h-2.5" /></button>
+                        </div>
+                      </div>
+                    </td>
                     <td colSpan={4} className="px-8 py-3 font-black text-[#004071] text-xs uppercase">{chapter.name}</td>
                     <td className="px-8 py-3 text-right font-black text-[#004071] text-xs">{formatCLP(chapter.totalChapter)}</td>
                   </tr>
-                  {chapter.apus.map(apu => (
-                    <tr key={apu.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
-                      <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">{apu.code}</td>
-                      <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
-                      <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
-                      <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
-                      <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(apu.unitarioNeto)}</td>
-                      <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(apu.subtotal)}</td>
-                    </tr>
-                  ))}
+                  {chapter.apus.map((apu, aIdx) => {
+                    const getApuStats = (activeApu: APU) => {
+                      const laws = activeApu.useProjectGlobalRates ? project.globalSocialLaws : activeApu.socialLawsPercentage;
+                      const overhead = activeApu.useProjectGlobalRates ? project.globalOverhead : activeApu.overheadPercentage;
+                      const utility = activeApu.useProjectGlobalRates ? project.globalUtility : activeApu.utilityPercentage;
+
+                      const sMat = activeApu.items[ItemCategory.MATERIAL].reduce((s, i) => s + (i.total || 0), 0);
+                      const sMoB = activeApu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + (i.total || 0), 0);
+                      const sEq = activeApu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
+                      const sOt = activeApu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
+
+                      const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
+                      const factorIndirectos = 1 + (overhead + utility) / 100;
+                      const costoNetoTotal = costoDirectoTotal * factorIndirectos;
+
+                      const displayPU = (activeApu.divideUnitPrice && (activeApu.divisorQuantity || 0) > 0)
+                        ? costoNetoTotal / (activeApu.divisorQuantity || 1)
+                        : costoNetoTotal;
+
+                      return { displayPU, subtotal: displayPU * activeApu.quantity };
+                    };
+
+                    const { displayPU, subtotal } = getApuStats(apu);
+
+                    return (
+                      <tr key={apu.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
+                        <td className="px-8 py-3 text-[10px] text-slate-400 font-medium">
+                          <div className="flex items-center gap-2 font-mono">
+                            <span>{cIdx + 1}.{aIdx + 1}</span>
+                            <div className="flex flex-col">
+                              <button onClick={() => moveApu(apu.id, 'up')} className="hover:text-blue-600 outline-none"><ChevronUp className="w-2.5 h-2.5" /></button>
+                              <button onClick={() => moveApu(apu.id, 'down')} className="hover:text-blue-600 outline-none"><ChevronDown className="w-2.5 h-2.5" /></button>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-8 py-3 text-xs text-slate-600 font-medium">{apu.name}</td>
+                        <td className="px-8 py-3 text-[10px] text-center text-slate-500">{apu.unit}</td>
+                        <td className="px-8 py-3 text-[10px] text-center text-slate-400 font-mono">{formatQuantity(apu.quantity)}</td>
+                        <td className="px-8 py-3 text-[10px] text-right text-slate-400 font-mono">{formatCLP(displayPU)}</td>
+                        <td className="px-8 py-3 text-xs text-right font-bold text-slate-700 font-mono">{formatCLP(subtotal)}</td>
+                      </tr>
+                    );
+                  })}
                 </React.Fragment>
               ))}
             </tbody>

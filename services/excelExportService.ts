@@ -34,24 +34,24 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
 
     let grandTotalNeto = 0;
     const sortedChapters = chapters
-        .filter(c => c.projectId === project.id)
-        .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        .filter(c => c.projectId === project.id);
 
-    sortedChapters.forEach(chap => {
+    sortedChapters.forEach((chap, cIdx) => {
+        const chapterNumber = cIdx + 1;
         // Fila de Capítulo
-        budgetRows.push([chap.code, chap.name.toUpperCase(), "", "", "", ""]);
+        budgetRows.push([chapterNumber, chap.name.toUpperCase(), "", "", "", ""]);
 
         const chapApus = apus
-            .filter(a => a.chapterId === chap.id)
-            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+            .filter(a => a.chapterId === chap.id);
 
-        chapApus.forEach(apu => {
+        chapApus.forEach((apu, aIdx) => {
+            const apuNumber = `${chapterNumber}.${aIdx + 1}`;
             const stats = calculateApuTotals(apu, project);
             const totalPartida = stats.precioUnitarioNeto * apu.quantity;
             grandTotalNeto += totalPartida;
 
             budgetRows.push([
-                apu.code,
+                apuNumber,
                 apu.name,
                 apu.unit,
                 decCell(apu.quantity.toFixed(1)),
@@ -85,8 +85,15 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
     XLSX.utils.book_append_sheet(wb, wsBudget, "Presupuesto");
 
     // --- HOJAS ADICIONALES: UN APU POR HOJA ---
-    apus.filter(a => a.projectId === project.id).forEach(apu => {
-        const wsApu = createApuWorksheet(apu, project);
+    apus.filter(a => a.projectId === project.id).forEach((apu, idx) => {
+        const chapter = chapters.find(c => c.id === apu.chapterId);
+        const chapterIndices = chapters.filter(c => c.projectId === project.id);
+        const cIdx = chapterIndices.findIndex(c => c.id === apu.chapterId);
+        const chapterApus = apus.filter(a => a.chapterId === apu.chapterId);
+        const aIdx = chapterApus.findIndex(a => a.id === apu.id);
+
+        const apuNumber = (cIdx !== -1) ? `${cIdx + 1}.${aIdx + 1}` : apu.code;
+        const wsApu = createApuWorksheet(apu, project, apuNumber);
         // Nombre de hoja seguro (max 31 chars)
         const sheetName = `APU ${apu.code}`.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
@@ -98,17 +105,17 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
 export const exportSingleApuToExcel = (project: Project, apu: APU) => {
     if (!XLSX) return alert("Librería Excel no cargada.");
     const wb = XLSX.utils.book_new();
-    const wsApu = createApuWorksheet(apu, project);
+    const wsApu = createApuWorksheet(apu, project, apu.code);
     const sheetName = `APU ${apu.code}`.substring(0, 31);
     XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
     XLSX.writeFile(wb, `HDG_APU_${apu.code}_${apu.name.substring(0, 20)}.xlsx`);
 };
 
-const createApuWorksheet = (apu: APU, project: Project) => {
+const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
     const stats = calculateApuTotals(apu, project);
     const apuRows: any[] = [
         ["ANÁLISIS DE PRECIO UNITARIO"],
-        [`PARTIDA: ${apu.code} - ${apu.name.toUpperCase()}`],
+        [`PARTIDA: ${apuNumber} - ${apu.name.toUpperCase()}`],
         [`UNIDAD: ${apu.unit} | CANTIDAD PROYECTO: ${apu.quantity}`],
         [],
         ["CATEGORÍA", "RECURSO / DESCRIPCIÓN", "UNIDAD", "REND/CANT", "P. UNITARIO", "TOTAL"]

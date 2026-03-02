@@ -53,7 +53,7 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
     ? costoNetoUnitario / (apu.divisorQuantity || 1)
     : costoNetoUnitario;
 
-  const totalPartidaConIva = (costoNetoUnitario * apu.quantity) * 1.19;
+  const totalPartidaConIva = (displayUnitPrice * apu.quantity) * 1.19;
 
   const handleAiSuggest = async () => {
     if (!apu.name) return alert('Ingresa nombre de partida.');

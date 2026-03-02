@@ -31,7 +31,7 @@ export const useAppStore = () => {
   const loadProject = useCallback((id: string) => {
     const dataKey = `${PROJECT_PREFIX}${id}`;
     const savedData = localStorage.getItem(dataKey);
-    
+
     if (savedData) {
       const parsed = JSON.parse(savedData);
       setChapters(parsed.chapters || []);
@@ -113,16 +113,16 @@ export const useAppStore = () => {
       // Filtrar solo capítulos del proyecto actual para el movimiento
       const otherProjectsChapters = prev.filter(c => c.projectId !== activeProjectId);
       const currentProjectChapters = prev.filter(c => c.projectId === activeProjectId);
-      
+
       const currentIndex = currentProjectChapters.findIndex(c => c.id === chapterId);
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-      
+
       if (targetIndex < 0 || targetIndex >= currentProjectChapters.length) return prev;
-      
+
       const newCurrentProjectChapters = [...currentProjectChapters];
       const [movedItem] = newCurrentProjectChapters.splice(currentIndex, 1);
       newCurrentProjectChapters.splice(targetIndex, 0, movedItem);
-      
+
       return [...otherProjectsChapters, ...newCurrentProjectChapters];
     });
   }, [activeProjectId]);
@@ -153,10 +153,31 @@ export const useAppStore = () => {
     });
   }, []);
 
+  const moveApu = useCallback((apuId: string, direction: 'up' | 'down') => {
+    setApus(prev => {
+      const apu = prev.find(a => a.id === apuId);
+      if (!apu) return prev;
+
+      const otherApus = prev.filter(a => a.chapterId !== apu.chapterId);
+      const chapterApus = prev.filter(a => a.chapterId === apu.chapterId);
+
+      const currentIndex = chapterApus.findIndex(a => a.id === apuId);
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+      if (targetIndex < 0 || targetIndex >= chapterApus.length) return prev;
+
+      const newChapterApus = [...chapterApus];
+      const [movedItem] = newChapterApus.splice(currentIndex, 1);
+      newChapterApus.splice(targetIndex, 0, movedItem);
+
+      return [...otherApus, ...newChapterApus];
+    });
+  }, []);
+
   return {
     projects, setProjects,
     chapters, setChapters, addChapter, moveChapter, deleteChapter,
-    apus, setApus, addApu, updateApu, deleteApu,
+    apus, setApus, addApu, updateApu, deleteApu, moveApu,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved
