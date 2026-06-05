@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, ClipboardPaste, X, Check, Map as MapIcon } from 'lucide-react';
+import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, ClipboardPaste, X, Check, Copy, Map as MapIcon } from 'lucide-react';
 import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
-import { getDeviationReasoning, getFieldSuggestion } from '../services/geminiService';
+import { getDeviationReasoning, getFieldSuggestion, getResourcePriceFromWeb } from '../services/geminiService';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { formatUnit, formatCLP } from '../services/exportService';
+import { toast } from 'sonner';
 
 interface SectionTableProps {
   category: ItemCategory;
@@ -39,6 +40,85 @@ const SectionTable: React.FC<SectionTableProps> = ({
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [loadingPriceItemIds, setLoadingPriceItemIds] = useState<Record<string, boolean>>({});
+  const [hasCopiedItem, setHasCopiedItem] = useState(false);
+
+  useEffect(() => {
+    const checkClipboard = () => {
+      const item = localStorage.getItem('apu_copied_resource_item');
+      setHasCopiedItem(!!item);
+    };
+    checkClipboard();
+    window.addEventListener('focus', checkClipboard);
+    return () => window.removeEventListener('focus', checkClipboard);
+  }, []);
+
+  const handleCopyItem = (item: APUItem) => {
+    localStorage.setItem('apu_copied_resource_item', JSON.stringify({
+      description: item.description,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      performance: item.performance
+    }));
+    setHasCopiedItem(true);
+    toast.success(`Recurso "${item.description}" copiado al portapapeles`);
+  };
+
+  const handlePasteItem = () => {
+    const raw = localStorage.getItem('apu_copied_resource_item');
+    if (!raw) return;
+    try {
+      const copied = JSON.parse(raw);
+      const newItem: APUItem = {
+        id: crypto.randomUUID(),
+        description: copied.description || '',
+        unit: copied.unit || '',
+        quantity: typeof copied.quantity === 'number' ? copied.quantity : 1,
+        performance: typeof copied.performance === 'number' ? copied.performance : 1,
+        unitPrice: typeof copied.unitPrice === 'number' ? copied.unitPrice : 0,
+        total: 0
+      };
+      
+      const isLabor = category === ItemCategory.MANO_DE_OBRA;
+      newItem.total = isLabor ? newItem.performance * newItem.unitPrice : newItem.quantity * newItem.unitPrice;
+      
+      onChange([...items, newItem]);
+      toast.success(`Recurso "${newItem.description}" pegado con éxito`);
+    } catch (e) {
+      toast.error('Error al pegar el recurso');
+    }
+  };
+
+  const handleGeneratePrice = async (item: APUItem, index: number) => {
+    if (!item.description || item.description.trim() === '') {
+      toast.error('Por favor, ingresa una descripción para el recurso primero.');
+      return;
+    }
+    
+    setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: true }));
+    toast.info(`Buscando precios en la web para "${item.description}"...`);
+    
+    try {
+      const result = await getResourcePriceFromWeb(item.description, item.unit || 'UN', apuContext || '');
+      if (result && result.price > 0) {
+        updateItem(index, 'unitPrice', result.price);
+        
+        toast.success(`Precio sugerido: ${formatCLP(result.price)}`, {
+          description: `${result.reasoning} ${result.sources && result.sources.length > 0 ? `(Fuentes: ${result.sources.join(', ')})` : ''}`,
+          duration: 8000
+        });
+      } else {
+        toast.warning('La IA no pudo encontrar un precio preciso. Por favor ingresa el precio manualmente.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al consultar el precio con IA.');
+    } finally {
+      setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -170,7 +250,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
             <th className="pb-1 text-right w-36">{isLabor ? 'Rend.' : 'Cant.'}</th>
             <th className="pb-1 text-right w-40">P. Unit. ($)</th>
             <th className="pb-1 text-right w-32 pr-4">Total</th>
-            <th className="pb-1 w-10"></th>
+            <th className="pb-1 w-20"></th>
           </tr>
         </thead>
         <tbody>
@@ -231,17 +311,56 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     onBlur={() => { checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
                     className="w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black text-slate-600 p-0"
                   />
+                  <button
+                    type="button"
+                    onClick={() => handleGeneratePrice(item, idx)}
+                    disabled={loadingPriceItemIds[item.id]}
+                    title="Obtener precio sugerido por IA y Web"
+                    className="p-1 text-slate-300 hover:text-[#004071] transition-colors rounded disabled:opacity-50"
+                  >
+                    {loadingPriceItemIds[item.id] ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-[#004071]" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-[#88C13E]" />
+                    )}
+                  </button>
                 </div>
               </td>
               <td className="text-right pr-4 font-mono text-sm font-black text-[#004071]">${Math.round(Number(item.total) || 0).toLocaleString('es-CL')}</td>
-              <td><button onClick={() => onChange(items.filter(i => i.id !== item.id))} className="p-2 text-slate-200 hover:text-red-500"><Trash2 className="w-4 h-4" /></button></td>
+              <td>
+                <div className="flex items-center gap-1 justify-end pr-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyItem(item)}
+                    title="Copiar recurso"
+                    className="p-1 text-slate-200 hover:text-[#004071] transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => onChange(items.filter(i => i.id !== item.id))} className="p-1 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button onClick={() => onChange([...items, { id: crypto.randomUUID(), description: '', unit: '', quantity: 1, performance: 1, unitPrice: 0, total: 0 }])} className="mt-4 w-full py-4 border-2 border-dashed border-slate-100 rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3">
-        <Plus className="w-3 h-3" /> Añadir recurso
-      </button>
+      <div className="flex gap-3 mt-4">
+        <button
+          onClick={() => onChange([...items, { id: crypto.randomUUID(), description: '', unit: '', quantity: 1, performance: 1, unitPrice: 0, total: 0 }])}
+          className="flex-1 py-4 border-2 border-dashed border-slate-100 hover:border-slate-300 hover:text-[#004071] transition-all rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3"
+        >
+          <Plus className="w-3 h-3" /> Añadir recurso
+        </button>
+        <button
+          type="button"
+          onClick={handlePasteItem}
+          disabled={!hasCopiedItem}
+          className="px-6 py-4 border-2 border-dashed border-slate-100 hover:border-slate-300 hover:text-[#004071] transition-all rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Pegar recurso desde el portapapeles"
+        >
+          <ClipboardPaste className="w-4 h-4 text-[#88C13E]" /> Pegar recurso
+        </button>
+      </div>
     </div>
   );
 };

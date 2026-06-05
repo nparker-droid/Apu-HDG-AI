@@ -113,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onClick={() => activeProject && onShareProject(activeProject)}
                     className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black py-3 rounded-2xl transition-all uppercase tracking-widest text-[8px] disabled:opacity-50"
                 >
-                    <Share2 className="w-3 h-3" /> Backup
+                    <Share2 className="w-3 h-3" /> Exportar
                 </button>
             </div>
 

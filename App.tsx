@@ -31,7 +31,6 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // --- 1. SELECCIÓN DE DATOS CON "FAIL-SAFE" ---
   const activeProject = useMemo(() =>
     projects.find(p => p.id === activeProjectId) || null,
     [projects, activeProjectId]);
@@ -46,7 +45,6 @@ const App: React.FC = () => {
     return chapters.find(c => c.id === activeApu.chapterId) || null;
   }, [chapters, activeApu]);
 
-  // --- 2. RENUMERACIÓN AUTOMÁTICA (Protección contra Loops) ---
   useEffect(() => {
     if (!activeProjectId || chapters.length === 0) return;
 
@@ -69,12 +67,10 @@ const App: React.FC = () => {
       return apu.code !== newCode ? { ...apu, code: newCode } : apu;
     });
 
-    // Comparación profunda para evitar renders infinitos
     if (JSON.stringify(newChapters) !== JSON.stringify(chapters)) setChapters(newChapters);
     if (JSON.stringify(newApus) !== JSON.stringify(apus)) setApus(newApus);
-  }, [chapters.length, apus.length, activeProjectId]);
+  }, [chapters, apus, activeProjectId]);
 
-  // --- 3. AUTOGUARDADO (Timer independiente) ---
   const saveRef = useRef(saveActiveProject);
   useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
 
@@ -90,7 +86,6 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeProjectId]);
 
-  // --- 4. MANEJADORES DE ACCIÓN ---
   const handleManualSave = () => {
     setSaveStatus('saving');
     if (saveActiveProject()) {
@@ -109,7 +104,7 @@ const App: React.FC = () => {
       code: '',
       name: 'Nueva Partida',
       unit: 'GL',
-      quantity: 1.0, // Forzado a número inicial
+      quantity: 1.0,
       items: {
         [ItemCategory.MATERIAL]: [],
         [ItemCategory.MANO_DE_OBRA]: [],
@@ -124,6 +119,59 @@ const App: React.FC = () => {
     };
     setApus([...apus, nApu]);
     setCurrentApuId(nApu.id);
+  };
+
+  const handleShareProject = (project: Project) => {
+    const exportData = {
+      project,
+      chapters: chapters.filter(c => c.projectId === project.id),
+      apus: apus.filter(a => a.projectId === project.id),
+      exportVersion: "2.0",
+      exportDate: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HDG_Export_${project.code}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Proyecto exportado correctamente');
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (!data.project || !data.chapters || !data.apus) throw new Error("Inválido");
+        
+        const newProjectId = safeUUID();
+        const timestamp = Date.now();
+        const newProject = { ...data.project, id: newProjectId, createdAt: timestamp, updatedAt: timestamp };
+        
+        const newChapters = data.chapters.map((c: any) => ({ ...c, id: safeUUID(), projectId: newProjectId, oldId: c.id }));
+        const newApus = data.apus.map((a: any) => {
+          const chapter = newChapters.find((nc: any) => nc.oldId === a.chapterId);
+          return { ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId };
+        });
+
+        const physicalData = { metadata: newProject, chapters: newChapters, apus: newApus };
+        localStorage.setItem(`apu_engine_project_${newProjectId}`, JSON.stringify(physicalData));
+        
+        setProjects([newProject, ...projects]);
+        loadProject(newProjectId);
+        toast.success(`Proyecto "${newProject.name}" importado con éxito`);
+      } catch (err) { 
+        toast.error("Error al importar el archivo JSON"); 
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -149,8 +197,8 @@ const App: React.FC = () => {
         onCreateApu={handleCreateApu}
         onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; setApus([...apus, dup]); }}
         onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
-        onShareProject={() => { }}
-        handleImport={() => { }}
+        onShareProject={handleShareProject}
+        handleImport={handleImport}
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
@@ -195,7 +243,6 @@ const App: React.FC = () => {
             </header>
 
             <div className="p-8">
-              {/* LÓGICA DEFENSIVA: Evita que el editor reciba datos incompletos */}
               {activeApu && activeChapter ? (
                 <div key={activeApu.id}>
                   <APUEditor
@@ -235,7 +282,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* MODALES */}
       {isProjectModalOpen && (
         <ProjectModal
           initialData={editingProject || undefined}
@@ -263,6 +309,8 @@ const App: React.FC = () => {
         <LibraryModal
           onClose={() => setLibraryChapterId(null)}
           projectApus={apus.filter(a => a.projectId === activeProjectId)}
+          projects={projects}
+          activeProjectId={activeProjectId || ''}
           onSelect={(libApu) => {
             if (activeProjectId) {
               const proj = projects.find(p => p.id === activeProjectId);
