@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Eraser, Search, AlertCircle, Sparkles, Loader2, ClipboardPaste, X, Check, Copy, Map as MapIcon } from 'lucide-react';
-import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
-import { getDeviationReasoning, getFieldSuggestion, getResourcePriceFromWeb } from '../services/geminiService';
+import { Plus, Trash2, Sparkles, Loader2, ClipboardPaste, X, Check, Copy } from 'lucide-react';
+import { APUItem, ItemCategory, HistoryItem } from '../types';
+import { getDeviationReasoning, getResourcePriceFromWeb } from '../services/geminiService';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { formatUnit, formatCLP } from '../services/exportService';
 import { toast } from 'sonner';
@@ -25,6 +25,20 @@ interface DeviationAlert {
   isAiSuggestion?: boolean;
 }
 
+const parseLocaleNumber = (value: string | number) => {
+  if (typeof value === 'number') return value;
+  const normalized = value
+    .replace(/\s/g, '')
+    .replace(/\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  return parseFloat(normalized) || 0;
+};
+
+const formatThousands = (value: number) => Math.round(Number(value) || 0).toLocaleString('es-CL');
+
+const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/40' : '';
+
 const SectionTable: React.FC<SectionTableProps> = ({
   category,
   items,
@@ -36,13 +50,13 @@ const SectionTable: React.FC<SectionTableProps> = ({
 }) => {
   const [showHistoryForIdx, setShowHistoryForIdx] = useState<number | null>(null);
   const [activeAlert, setActiveAlert] = useState<DeviationAlert | null>(null);
-  const [isAiLoadingField, setIsAiLoadingField] = useState<string | null>(null);
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [loadingPriceItemIds, setLoadingPriceItemIds] = useState<Record<string, boolean>>({});
   const [hasCopiedItem, setHasCopiedItem] = useState(false);
+  const [focusedCell, setFocusedCell] = useState<string | null>(null);
 
   useEffect(() => {
     const checkClipboard = () => {
@@ -82,13 +96,50 @@ const SectionTable: React.FC<SectionTableProps> = ({
       };
       
       const isLabor = category === ItemCategory.MANO_DE_OBRA;
-      newItem.total = isLabor ? newItem.performance * newItem.unitPrice : newItem.quantity * newItem.unitPrice;
+      newItem.total = isLabor ? (newItem.performance || 0) * newItem.unitPrice : newItem.quantity * newItem.unitPrice;
       
       onChange([...items, newItem]);
       toast.success(`Recurso "${newItem.description}" pegado con éxito`);
     } catch (e) {
       toast.error('Error al pegar el recurso');
     }
+  };
+
+  const isLabor = category === ItemCategory.MANO_DE_OBRA;
+
+  const handleBulkPaste = () => {
+    const rows = bulkText
+      .split(/\r?\n/)
+      .map(row => row.trim())
+      .filter(Boolean);
+
+    const parsedItems = rows.map(row => {
+      const parts = row.includes(';') ? row.split(';') : row.split(/\t/);
+      const [description = '', unit = '', amount = '1', price = '0'] = parts.map(part => part.trim());
+      const quantityOrPerformance = parseLocaleNumber(amount);
+      const unitPrice = parseLocaleNumber(price);
+      const newItem: APUItem = {
+        id: crypto.randomUUID(),
+        description,
+        unit,
+        quantity: isLabor ? 1 : quantityOrPerformance,
+        performance: isLabor ? quantityOrPerformance : 1,
+        unitPrice,
+        total: 0
+      };
+      newItem.total = isLabor ? (newItem.performance || 0) * unitPrice : newItem.quantity * unitPrice;
+      return newItem;
+    }).filter(item => item.description.trim() !== '');
+
+    if (parsedItems.length === 0) {
+      toast.error('No se encontraron filas válidas para pegar.');
+      return;
+    }
+
+    onChange([...items, ...parsedItems]);
+    setBulkText('');
+    setShowBulkPaste(false);
+    toast.success(`${parsedItems.length} recursos pegados correctamente`);
   };
 
   const handleGeneratePrice = async (item: APUItem, index: number) => {
@@ -187,7 +238,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
   const updateItem = (index: number, field: keyof APUItem, value: any) => {
     if (!items || !items[index]) return;
     const newItems = [...items];
-    const item = { ...newItems[index], [field]: value };
+    const item = { ...newItems[index], [field]: field === 'unitPrice' || field === 'quantity' || field === 'performance' ? parseLocaleNumber(value) : value };
 
     const p = parseFloat(String(item.performance ?? 0)) || 0;
     const up = parseFloat(String(item.unitPrice ?? 0)) || 0;
@@ -234,8 +285,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
     }
   };
 
-  const isLabor = category === ItemCategory.MANO_DE_OBRA;
-
   return (
     <div className="overflow-visible" ref={containerRef}>
       <div className="flex justify-between items-center mb-4 px-1">
@@ -266,7 +315,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   }}
                   onFocus={() => item.description && setShowHistoryForIdx(idx)}
                   onBlur={() => handleBlurItem(idx)}
-                  className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700"
+                  className={`w-full bg-transparent rounded-lg focus:ring-0 text-sm font-bold text-slate-700 ${emptyFieldClass(!item.description)}`}
                   placeholder="Descripción..."
                 />
                 {showHistoryForIdx === idx && filteredHistory.length > 0 && (
@@ -277,7 +326,17 @@ const SectionTable: React.FC<SectionTableProps> = ({
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => {
                           const newItems = [...items];
-                          newItems[idx] = { ...newItems[idx], description: h.description, unit: h.unit, unitPrice: h.unitPrice, performance: h.performance, total: h.performance * h.unitPrice };
+                          const quantity = category === ItemCategory.MANO_DE_OBRA ? 1 : (newItems[idx].quantity || 1);
+                          const performance = category === ItemCategory.MANO_DE_OBRA ? (h.performance || 1) : 1;
+                          newItems[idx] = {
+                            ...newItems[idx],
+                            description: h.description,
+                            unit: h.unit,
+                            unitPrice: h.unitPrice,
+                            quantity,
+                            performance,
+                            total: category === ItemCategory.MANO_DE_OBRA ? performance * h.unitPrice : quantity * h.unitPrice
+                          };
                           onChange(newItems);
                           setShowHistoryForIdx(null);
                         }}
@@ -290,25 +349,38 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   </div>
                 )}
               </td>
-              <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} className="w-full text-center bg-transparent border-none text-xs font-bold text-slate-400 uppercase" /></td>
+              <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} className={`w-full text-center bg-transparent rounded-lg text-xs font-bold text-slate-400 uppercase ${emptyFieldClass(!item.unit)}`} /></td>
               <td className="px-2">
                 <input
-                  type="number"
-                  step="0.1"
-                  value={(Number(isLabor ? item.performance : item.quantity) || 0).toFixed(3)}
-                  onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', parseFloat(e.target.value) || 0)}
-                  onBlur={() => { checkDeviation(item, 'performance'); handleBlurItem(idx); }}
-                  className="w-full text-right bg-transparent border-none font-mono text-sm font-black text-[#88C13E]"
+                  type="text"
+                  inputMode="decimal"
+                  value={focusedCell === `${item.id}:amount`
+                    ? ((Number(isLabor ? item.performance : item.quantity) || 0) === 0 ? '' : String(isLabor ? item.performance : item.quantity))
+                    : (Number(isLabor ? item.performance : item.quantity) || 0).toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                  onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', e.target.value)}
+                  onFocus={() => {
+                    setFocusedCell(`${item.id}:amount`);
+                    updateItem(idx, isLabor ? 'performance' : 'quantity', 0);
+                  }}
+                  onBlur={() => { setFocusedCell(null); checkDeviation(item, 'performance'); handleBlurItem(idx); }}
+                  className={`w-full text-right bg-transparent rounded-lg font-mono text-sm font-black text-[#88C13E] ${emptyFieldClass((Number(isLabor ? item.performance : item.quantity) || 0) === 0)}`}
                 />
               </td>
               <td className="px-2">
                 <div className="flex items-center justify-end gap-1 px-2 py-1 bg-slate-50/50 rounded-lg group-hover:bg-white transition-colors border border-transparent group-hover:border-slate-100">
                   <span className="text-[10px] text-slate-400 font-bold">$</span>
                   <input
-                    type="number"
-                    value={Number(item.unitPrice) || 0}
-                    onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                    onBlur={() => { checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
+                    type="text"
+                    inputMode="numeric"
+                    value={focusedCell === `${item.id}:unitPrice`
+                      ? ((Number(item.unitPrice) || 0) === 0 ? '' : String(item.unitPrice))
+                      : formatThousands(Number(item.unitPrice) || 0)}
+                    onChange={e => updateItem(idx, 'unitPrice', e.target.value)}
+                    onFocus={() => {
+                      setFocusedCell(`${item.id}:unitPrice`);
+                      updateItem(idx, 'unitPrice', 0);
+                    }}
+                    onBlur={() => { setFocusedCell(null); checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
                     className="w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black text-slate-600 p-0"
                   />
                   <button
@@ -326,7 +398,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   </button>
                 </div>
               </td>
-              <td className="text-right pr-4 font-mono text-sm font-black text-[#004071]">${Math.round(Number(item.total) || 0).toLocaleString('es-CL')}</td>
+              <td className="text-right pr-4 font-mono text-sm font-black text-[#004071]">${formatThousands(Number(item.total) || 0)}</td>
               <td>
                 <div className="flex items-center gap-1 justify-end pr-2">
                   <button
@@ -353,14 +425,56 @@ const SectionTable: React.FC<SectionTableProps> = ({
         </button>
         <button
           type="button"
-          onClick={handlePasteItem}
-          disabled={!hasCopiedItem}
+          onClick={() => setShowBulkPaste(true)}
           className="px-6 py-4 border-2 border-dashed border-slate-100 hover:border-slate-300 hover:text-[#004071] transition-all rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Pegar recurso desde el portapapeles"
+          title="Pegar recursos desde Excel"
         >
-          <ClipboardPaste className="w-4 h-4 text-[#88C13E]" /> Pegar recurso
+          <ClipboardPaste className="w-4 h-4 text-[#88C13E]" /> Pegar recursos
         </button>
+        {hasCopiedItem && (
+          <button
+            type="button"
+            onClick={handlePasteItem}
+            className="px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all rounded-[1.5rem] font-black text-[10px] uppercase flex items-center justify-center gap-2"
+            title="Pegar recurso copiado"
+          >
+            <Copy className="w-4 h-4" /> 1 recurso
+          </button>
+        )}
       </div>
+      {showBulkPaste && (
+        <div className="fixed inset-0 z-[80] bg-[#004071]/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden">
+            <div className="px-7 py-5 bg-slate-50 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-[#004071] uppercase tracking-widest">Pegar recursos desde Excel</h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Formato: Recurso; unidad; cantidad; precio</p>
+              </div>
+              <button onClick={() => setShowBulkPaste(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-7 space-y-5">
+              <textarea
+                value={bulkText}
+                onChange={e => setBulkText(e.target.value)}
+                rows={10}
+                autoFocus
+                placeholder={`Excavación manual; m3; 1,25; 18500\nRetiro de excedentes; m3; 1; 12000`}
+                className="w-full rounded-2xl border-2 border-slate-100 focus:border-[#004071] outline-none p-5 font-mono text-xs text-slate-700"
+              />
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShowBulkPaste(false)} className="px-5 py-3 rounded-xl bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                  Cancelar
+                </button>
+                <button onClick={handleBulkPaste} className="px-5 py-3 rounded-xl bg-[#88C13E] text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                  <Check className="w-4 h-4" /> Pegar filas
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

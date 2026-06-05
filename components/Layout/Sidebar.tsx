@@ -33,6 +33,7 @@ interface SidebarProps {
     currentApuId: string | null;
     setCurrentApuId: (id: string | null) => void;
     onNewProject: () => void;
+    onUserLibraryOpen: () => void;
     onEditProject: (project: Project) => void;
     onNewChapter: (projectId: string) => void;
     onLibraryOpen: (chapterId: string) => void;
@@ -51,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     projects, chapters, apus, moveChapter, deleteChapter,
     currentProjectId, setCurrentProjectId,
     currentApuId, setCurrentApuId,
-    onNewProject, onEditProject, onNewChapter,
+    onNewProject, onUserLibraryOpen, onEditProject, onNewChapter,
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onShareProject, handleImport,
     onDeleteProject, onDuplicateProject,
@@ -101,6 +102,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="p-4 grid grid-cols-2 gap-3 min-w-[20rem]">
+                <button onClick={onUserLibraryOpen} className="col-span-2 flex items-center justify-center gap-2 bg-[#88C13E] hover:bg-[#76aa34] text-white font-black py-4 rounded-2xl shadow-xl transition-all uppercase tracking-widest text-[9px]">
+                    <BookOpen className="w-4 h-4" /> Biblioteca del Usuario
+                </button>
                 <button onClick={onNewProject} className="col-span-2 flex items-center justify-center gap-2 bg-[#004071] hover:bg-[#002D50] text-white font-black py-4 rounded-2xl shadow-xl transition-all uppercase tracking-widest text-[9px]">
                     <Plus className="w-4 h-4" /> Nuevo Proyecto
                 </button>

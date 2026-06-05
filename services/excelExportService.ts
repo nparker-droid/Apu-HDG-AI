@@ -1,11 +1,8 @@
-
 import { Project, Chapter, APU, ItemCategory } from '../types';
+import { saveBlobWithPicker } from './fileSaveService';
 
 const XLSX = (window as any).XLSX;
 
-const formatCurrency = (val: number) => Math.round(val);
-
-// Helper para crear celdas con formato de número (separador de miles)
 const numCell = (value: number) => ({
     v: value,
     t: 'n',
@@ -18,12 +15,27 @@ const decCell = (value: number) => ({
     z: '#,##0.00'
 });
 
-export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus: APU[]) => {
+const safeSheetName = (name: string, fallback: string) => {
+    const cleaned = (name || fallback).replace(/[\\/?*[\]:]/g, ' ').trim() || fallback;
+    return cleaned.substring(0, 31);
+};
+
+const saveWorkbook = async (wb: any, fileName: string) => {
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    await saveBlobWithPicker(
+        blob,
+        fileName,
+        'Excel',
+        { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+    );
+};
+
+export const exportProjectToExcel = async (project: Project, chapters: Chapter[], apus: APU[]) => {
     if (!XLSX) return alert("Librería Excel no cargada.");
 
     const wb = XLSX.utils.book_new();
 
-    // --- HOJA 1: PRESUPUESTO GENERAL ---
     const budgetRows: any[] = [
         ["HIDROGESTIÓN - REPORTE DE PRESUPUESTO"],
         [`PROYECTO: ${project.name.toUpperCase()}`],
@@ -33,16 +45,13 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
     ];
 
     let grandTotalNeto = 0;
-    const sortedChapters = chapters
-        .filter(c => c.projectId === project.id);
+    const sortedChapters = chapters.filter(c => c.projectId === project.id);
 
     sortedChapters.forEach((chap, cIdx) => {
         const chapterNumber = cIdx + 1;
-        // Fila de Capítulo
         budgetRows.push([chapterNumber, chap.name.toUpperCase(), "", "", "", ""]);
 
-        const chapApus = apus
-            .filter(a => a.chapterId === chap.id);
+        const chapApus = apus.filter(a => a.chapterId === chap.id);
 
         chapApus.forEach((apu, aIdx) => {
             const apuNumber = `${chapterNumber}.${aIdx + 1}`;
@@ -54,15 +63,14 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
                 apuNumber,
                 apu.name,
                 apu.unit,
-                decCell(apu.quantity.toFixed(1)),
+                decCell(Number(apu.quantity) || 0),
                 numCell(stats.precioUnitarioNeto),
                 numCell(totalPartida)
             ]);
         });
-        budgetRows.push([]); // Espacio entre capítulos
+        budgetRows.push([]);
     });
 
-    // Totales del Presupuesto
     budgetRows.push(
         [],
         ["", "", "", "", "SUBTOTAL NETO", numCell(grandTotalNeto)],
@@ -72,21 +80,18 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
 
     const wsBudget = XLSX.utils.aoa_to_sheet(budgetRows);
 
-    // Configurar anchos de columna para Presupuesto
     wsBudget['!cols'] = [
-        { wch: 10 }, // Ítem
-        { wch: 50 }, // Descripción
-        { wch: 10 }, // Unidad
-        { wch: 12 }, // Cantidad
-        { wch: 15 }, // P.U
-        { wch: 18 }  // Total
+        { wch: 10 },
+        { wch: 50 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 18 }
     ];
 
     XLSX.utils.book_append_sheet(wb, wsBudget, "Presupuesto");
 
-    // --- HOJAS ADICIONALES: UN APU POR HOJA ---
     apus.filter(a => a.projectId === project.id).forEach((apu, idx) => {
-        const chapter = chapters.find(c => c.id === apu.chapterId);
         const chapterIndices = chapters.filter(c => c.projectId === project.id);
         const cIdx = chapterIndices.findIndex(c => c.id === apu.chapterId);
         const chapterApus = apus.filter(a => a.chapterId === apu.chapterId);
@@ -94,21 +99,20 @@ export const exportProjectToExcel = (project: Project, chapters: Chapter[], apus
 
         const apuNumber = (cIdx !== -1) ? `${cIdx + 1}.${aIdx + 1}` : apu.code;
         const wsApu = createApuWorksheet(apu, project, apuNumber);
-        // Nombre de hoja seguro (max 31 chars)
-        const sheetName = `APU ${apu.code}`.substring(0, 31);
+        const sheetName = safeSheetName(`APU ${apu.code || idx + 1}`, `APU ${idx + 1}`);
         XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
     });
 
-    XLSX.writeFile(wb, `HDG_REPORTE_${project.code}.xlsx`);
+    await saveWorkbook(wb, `HDG_REPORTE_${project.code}.xlsx`);
 };
 
-export const exportSingleApuToExcel = (project: Project, apu: APU) => {
+export const exportSingleApuToExcel = async (project: Project, apu: APU) => {
     if (!XLSX) return alert("Librería Excel no cargada.");
     const wb = XLSX.utils.book_new();
     const wsApu = createApuWorksheet(apu, project, apu.code);
-    const sheetName = `APU ${apu.code}`.substring(0, 31);
+    const sheetName = safeSheetName(`APU ${apu.code}`, 'APU');
     XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
-    XLSX.writeFile(wb, `HDG_APU_${apu.code}_${apu.name.substring(0, 20)}.xlsx`);
+    await saveWorkbook(wb, `HDG_APU_${apu.code}_${apu.name.substring(0, 20)}.xlsx`);
 };
 
 const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
@@ -124,24 +128,23 @@ const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
     Object.values(ItemCategory).forEach(cat => {
         const items = apu.items[cat];
         if (items.length > 0) {
-            apuRows.push([cat, "", "", "", "", ""]); // Encabezado de categoría
+            apuRows.push([cat, "", "", "", "", ""]);
             items.forEach(i => {
                 apuRows.push([
                     "",
                     i.description,
                     i.unit,
-                    decCell(i.quantity || i.performance || 0),
+                    decCell(cat === ItemCategory.MANO_DE_OBRA ? (Number(i.performance) || 0) : (Number(i.quantity) || 0)),
                     numCell(i.unitPrice),
                     numCell(i.total)
                 ]);
             });
             const subCat = items.reduce((s, i) => s + i.total, 0);
             apuRows.push(["", `SUBTOTAL ${cat}`, "", "", "", numCell(subCat)]);
-            apuRows.push([]); // Espacio
+            apuRows.push([]);
         }
     });
 
-    // Bloque de cierre de APU
     const unitPriceRowLabel = apu.divideUnitPrice
         ? `PRECIO UNITARIO NETO (por ${apu.divisorQuantity || 1} ${apu.unit})`
         : "PRECIO UNITARIO NETO";
@@ -155,12 +158,12 @@ const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
 
     const wsApu = XLSX.utils.aoa_to_sheet(apuRows);
     wsApu['!cols'] = [
-        { wch: 15 }, // Cat
-        { wch: 45 }, // Desc
-        { wch: 10 }, // Unid
-        { wch: 12 }, // Rend
-        { wch: 15 }, // P.U
-        { wch: 15 }  // Total
+        { wch: 15 },
+        { wch: 45 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 15 }
     ];
     return wsApu;
 };

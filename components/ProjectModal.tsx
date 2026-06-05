@@ -1,7 +1,8 @@
-
 import { useState } from 'react';
 import { X, Save, Settings2, MapPin, ClipboardList, TrendingUp } from 'lucide-react';
 import { Project } from '../types';
+
+const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/50' : 'bg-slate-50 border-none';
 
 interface ProjectModalProps {
   onClose: () => void;
@@ -54,15 +55,15 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                <div className="md:col-span-1">
                   <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Código HDG</label>
-                  <input type="text" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-mono focus:ring-2 focus:ring-[#004071] transition-colors" placeholder="HDG-2024-XX" />
+                  <input type="text" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} className={`w-full px-4 py-3 rounded-xl text-sm font-mono focus:ring-2 focus:ring-[#004071] transition-colors ${emptyFieldClass(!formData.code)}`} placeholder="HDG-2024-XX" />
                </div>
                <div className="md:col-span-2">
                   <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nombre del Proyecto</label>
-                  <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#004071] transition-colors" />
+                  <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className={`w-full px-4 py-3 rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#004071] transition-colors ${emptyFieldClass(!formData.name)}`} />
                </div>
                <div className="md:col-span-1">
                   <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Fecha Emisión</label>
-                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-[#004071] transition-colors" />
+                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className={`w-full px-4 py-3 rounded-xl text-sm focus:ring-2 focus:ring-[#004071] transition-colors ${emptyFieldClass(!formData.date)}`} />
                </div>
             </div>
           </div>
@@ -84,7 +85,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
                 <div className="col-span-2">
                   <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Versión / Etapa</label>
                   <div className="flex gap-2">
-                    <input type="text" value={formData.version} onChange={e => setFormData({...formData, version: e.target.value})} className="w-1/3 px-4 py-3 bg-slate-50 border-none rounded-xl text-sm transition-colors" placeholder="Ej: REV A" />
+                <input type="text" value={formData.version} onChange={e => setFormData({...formData, version: e.target.value})} className={`w-1/3 px-4 py-3 rounded-xl text-sm transition-colors ${emptyFieldClass(!formData.version)}`} placeholder="Ej: REV A" />
                     <select value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})} className="w-2/3 px-4 py-3 bg-slate-50 border-none rounded-xl text-sm transition-colors">
                       <option>Estudio de Perfil</option>
                       <option>Licitación</option>
@@ -103,39 +104,3 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* SECCIÓN: VALORES ECONÓMICOS */}
-          <div className="space-y-6 pt-4 border-t border-slate-100 transition-colors">
-            <div className="flex items-center gap-2 text-[#004071]">
-              <TrendingUp className="w-4 h-4" />
-              <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">Configuración Económica Global</h4>
-            </div>
-            <div className="bg-[#004071]/5 p-8 rounded-[2rem] grid grid-cols-3 gap-8 border border-[#004071]/10 transition-colors">
-               <div className="space-y-2">
-                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Leyes Sociales (%)</label>
-                  <input type="number" step="0.1" value={formData.globalSocialLaws} onChange={e => setFormData({...formData, globalSocialLaws: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-white border-none rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors" />
-               </div>
-               <div className="space-y-2">
-                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Gastos Generales (%)</label>
-                  <input type="number" step="0.1" value={formData.globalOverhead} onChange={e => setFormData({...formData, globalOverhead: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-white border-none rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors" />
-               </div>
-               <div className="space-y-2">
-                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Utilidades (%)</label>
-                  <input type="number" step="0.1" value={formData.globalUtility} onChange={e => setFormData({...formData, globalUtility: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-white border-none rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors" />
-               </div>
-            </div>
-          </div>
-
-          <div className="pt-6">
-            <button type="submit" className="w-full bg-[#004071] hover:bg-[#002D50] text-white font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs">
-              <Save className="w-5 h-5" /> {initialData ? 'Actualizar Ficha de Proyecto' : 'Inicializar Nuevo Proyecto Hidrogestión'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-export default ProjectModal;

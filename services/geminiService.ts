@@ -5,6 +5,14 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const SYSTEM_CONTEXT = "Eres un experto en ingeniería de costos y presupuestos en Chile. Proporcionas análisis técnicos precisos, rendimientos realistas y precios unitarios actualizados para el año 2024-2025 en CLP. No incluyas IVA en los precios.";
 
+const parseJsonObject = (text: string) => {
+  const cleaned = text.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('No JSON object found');
+  return JSON.parse(cleaned.slice(start, end + 1));
+};
+
 export const getApuSuggestions = async (name: string) => {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
@@ -110,45 +118,12 @@ export const getResourcePriceFromWeb = async (
       contents: [{
         role: "user",
         parts: [{
-          text: `Busca en la web precios reales y actualizados de mercado en Chile para el siguiente recurso de construcción:
+          text: `${SYSTEM_CONTEXT}
+Busca en la web precios reales y actualizados de mercado en Chile para el siguiente recurso de construcción:
 Recurso: "${description}"
 Unidad de medida: "${unit}"
 Contexto de la partida de obra: "${apuContext}"
 
-Genera una estimación de precio unitario neto (en CLP, número entero, sin IVA). Devuelve un JSON estructurado con:
-- "price": el valor numérico en CLP (entero neto, mayor a 0).
-- "reasoning": explicación corta de por qué se estima ese precio y qué fuentes o comercios (como Sodimac, Easy, Construmart, etc.) se tomaron como referencia en Chile (máx 35 palabras).
-- "sources": un arreglo de URLs o nombres de los sitios consultados.`
-        }]
-      }],
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            price: { type: Type.NUMBER },
-            reasoning: { type: Type.STRING },
-            sources: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          },
-          required: ["price", "reasoning"]
-        }
-      }
-    });
-
-    if (response.text) {
-      return JSON.parse(response.text);
-    }
-  } catch (error) {
-    console.error("Error fetching price from Gemini Web Search:", error);
-  }
-  
-  return {
-    price: 0,
-    reasoning: "No se pudo obtener información en la web para este recurso.",
-    sources: []
-  };
-};
+Genera una estimación de precio unitario neto en CLP, entero, sin IVA.
+Devuelve solamente JSON válido, sin markdown:
+{"price":12345,"rea

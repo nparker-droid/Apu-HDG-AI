@@ -6,6 +6,7 @@ import SectionTable from './SectionTable';
 import { exportSingleApuToExcel } from '../services/excelExportService';
 
 const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
+const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/50' : '';
 
 interface APUEditorProps {
   apu: APU;
@@ -60,8 +61,21 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
     setIsAiLoading(true);
     try {
       const s = await getApuSuggestions(apu.name);
-      const map = (items: any[]) => items.map(i => ({ id: crypto.randomUUID(), description: i.description, unit: i.unit, quantity: 1, performance: i.performance || 1, unitPrice: i.unitPrice, total: i.unitPrice * (i.performance || 1) }));
-      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials), [ItemCategory.MANO_DE_OBRA]: map(s.labor), [ItemCategory.EQUIPO]: map(s.equipment), [ItemCategory.OTROS]: [] } });
+      const map = (items: any[], usePerformance = false) => items.map(i => {
+        const quantity = usePerformance ? 1 : (Number(i.quantity) || 1);
+        const performance = usePerformance ? (Number(i.performance) || 1) : 1;
+        const unitPrice = Number(i.unitPrice) || 0;
+        return {
+          id: crypto.randomUUID(),
+          description: i.description,
+          unit: i.unit,
+          quantity,
+          performance,
+          unitPrice,
+          total: unitPrice * (usePerformance ? performance : quantity)
+        };
+      });
+      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials), [ItemCategory.MANO_DE_OBRA]: map(s.labor, true), [ItemCategory.EQUIPO]: map(s.equipment, true), [ItemCategory.OTROS]: [] } });
     } catch (e) { alert('Error IA'); } finally { setIsAiLoading(false); }
   };
 
@@ -117,20 +131,20 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-2 space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Hash className="w-3 h-3" /> Ítem</label>
-            <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-[#004071]" />
+            <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-[#004071] ${emptyFieldClass(!apu.code)}`} />
           </div>
           <div className="lg:col-span-6 space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Descripción Técnica</label>
             <div className="relative group">
-              <input type="text" value={apu.name} onChange={e => handleChange('name', e.target.value)} placeholder="Partida..." className="w-full text-xl font-black bg-slate-50 border-none rounded-xl px-6 py-3 text-slate-800" />
+              <input type="text" value={apu.name} onChange={e => handleChange('name', e.target.value)} placeholder="Partida..." className={`w-full text-xl font-black rounded-xl px-6 py-3 text-slate-800 ${emptyFieldClass(!apu.name)}`} />
               <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#004071] hover:bg-[#002D50] text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
                 {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-[#D9E021]" />} Analizar IA
               </button>
             </div>
           </div>
           <div className="lg:col-span-4 grid grid-cols-2 gap-4">
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600" /></div>
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="number" step="0.001" value={apu.quantity} onChange={e => handleChange('quantity', e.target.value)} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E]" /></div>
+            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600 ${emptyFieldClass(!apu.unit)}`} /></div>
+            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="number" step="0.001" value={apu.quantity} onFocus={e => e.currentTarget.select()} onChange={e => handleChange('quantity', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
           </div>
         </div>
 

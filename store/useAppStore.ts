@@ -105,10 +105,24 @@ export const useAppStore = () => {
       updatedAt: timestamp
     };
 
+    const chapterIdMap = new Map<string, string>();
+    const duplicatedChapters = sourceData.chapters.map((c: Chapter) => {
+      const newChapterId = crypto.randomUUID();
+      chapterIdMap.set(c.id, newChapterId);
+      return { ...c, id: newChapterId, projectId: newId };
+    });
+
+    const duplicatedApus = sourceData.apus.map((a: APU) => ({
+      ...a,
+      id: crypto.randomUUID(),
+      projectId: newId,
+      chapterId: chapterIdMap.get(a.chapterId) || a.chapterId
+    }));
+
     const newData = {
       ...sourceData,
-      chapters: sourceData.chapters.map((c: Chapter) => ({ ...c, id: crypto.randomUUID(), projectId: newId })),
-      apus: sourceData.apus.map((a: APU) => ({ ...a, id: crypto.randomUUID(), projectId: newId })),
+      chapters: duplicatedChapters,
+      apus: duplicatedApus,
       metadata: newMetadata
     };
 

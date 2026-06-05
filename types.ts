@@ -80,3 +80,28 @@ export interface ProjectFullData {
   chapters: Chapter[];
   apus: APU[];
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  points: number;
+  level: number;
+  achievements: Achievement[];
+  registeredAt: number;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt?: number;
+}
+
+export interface ConsumptionData {
+  month: string;
+  waterSaved: number; // liters
+  energySaved: number; // kWh
+  carbonReduced: number; // kg
+}

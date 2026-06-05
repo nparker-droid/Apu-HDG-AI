@@ -1,6 +1,6 @@
-
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { LOGO_BASE64 } from './logoData';
+import { saveBlobWithPicker } from './fileSaveService';
 
 const getJsPDF = () => {
   const g = window as any;
@@ -85,7 +85,7 @@ const calculateTotals = (apu: APU, project: Project) => {
   return { costoDirecto: costoDirectoTotal, precioUnitarioNeto, factorIndirectos, laws, overhead, utility };
 };
 
-export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: APU[]) => {
+export const exportProjectToPDF = async (project: Project, chapters: Chapter[], apus: APU[]) => {
   const jsPDF = getJsPDF();
   if (!jsPDF) return;
 
@@ -181,7 +181,7 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(unitPriceLabel, 120, currentY + 22);
-      doc.text(formatCLP(stats.precioUnitarioNeto * apu.quantity), 196, currentY + 22, { align: 'right' });
+      doc.text(formatCLP(stats.precioUnitarioNeto), 196, currentY + 22, { align: 'right' });
 
       currentY += 28;
 
@@ -194,10 +194,15 @@ export const exportProjectToPDF = (project: Project, chapters: Chapter[], apus: 
   });
 
   addPageNumbers(doc);
-  doc.save(`HDG_APU_PROYECTO_${project.code}.pdf`);
+  await saveBlobWithPicker(
+    doc.output('blob'),
+    `HDG_APU_PROYECTO_${project.code}.pdf`,
+    'PDF',
+    { 'application/pdf': ['.pdf'] }
+  );
 };
 
-export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: APU[]) => {
+export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], apus: APU[]) => {
   const jsPDF = getJsPDF();
   if (!jsPDF) return;
 
@@ -251,7 +256,7 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
   if (finalY > 250) {
     doc.addPage();
     drawCorporateHeader(doc, project, 'Presupuesto de Obras');
-    finalY = 45; // Resetear Y para que no quede al fondo
+    finalY = 45;
   }
 
   const boxWidth = 85;
@@ -280,11 +285,16 @@ export const exportBudgetToPDF = (project: Project, chapters: Chapter[], apus: A
   doc.text(formatCLP(totalNetoProyecto * 1.19), 194, finalY + 22, { align: 'right' });
 
   addPageNumbers(doc);
-  doc.save(`HDG_PRESUPUESTO_${project.code}.pdf`);
+  await saveBlobWithPicker(
+    doc.output('blob'),
+    `HDG_PRESUPUESTO_${project.code}.pdf`,
+    'PDF',
+    { 'application/pdf': ['.pdf'] }
+  );
 };
 
-export const exportSingleApuPDF = (project: Project, chapter: Chapter, apu: APU) => {
+export const exportSingleApuPDF = async (project: Project, chapter: Chapter, apu: APU) => {
   const jsPDF = getJsPDF();
   if (!jsPDF) return;
-  exportProjectToPDF(project, [chapter], [apu]);
+  await exportProjectToPDF(project, [chapter], [apu]);
 };
