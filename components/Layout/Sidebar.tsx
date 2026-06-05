@@ -126,16 +126,25 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {projects.map(project => (
                     <div key={project.id} className="group/project space-y-1">
                         <div
-                            onClick={() => setCurrentProjectId(project.id === currentProjectId ? null : project.id)}
+                            onClick={() => setCurrentProjectId(project.id)}
                             className={cn(
                                 "flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all",
                                 currentProjectId === project.id ? 'bg-[#004071] text-white shadow-lg' : 'hover:bg-slate-50 text-slate-600'
                             )}
                         >
                             <div className="flex items-center gap-3 overflow-hidden">
-                                <ChevronRight className={cn("w-4 h-4 transition-transform", currentProjectId === project.id && 'rotate-90 text-[#D9E021]')} />
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentProjectId(project.id === currentProjectId ? null : project.id);
+                                    }}
+                                    className="p-0.5"
+                                    title="Expandir o contraer proyecto"
+                                >
+                                    <ChevronRight className={cn("w-4 h-4 transition-transform", currentProjectId === project.id && 'rotate-90 text-[#D9E021]')} />
+                                </button>
                                 <div className="flex flex-col overflow-hidden">
-                                    <span className="text-[10px] font-black truncate uppercase tracking-tighter">{project.name}</span>
+                                    <span className="text-[10px] font-black uppercase tracking-tighter whitespace-normal break-words leading-tight">{project.name}</span>
                                     <span className="text-[7px] font-bold opacity-60 uppercase">{project.code}</span>
                                 </div>
                             </div>
@@ -194,7 +203,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                         currentApuId === apu.id ? 'bg-[#88C13E] text-white shadow-md scale-[1.02]' : 'hover:bg-indigo-50 text-slate-500'
                                                     )}
                                                 >
-                                                    <span className="truncate pr-2 font-bold">{apu.code} {apu.name}</span>
+                                                    <span className="pr-2 font-bold whitespace-normal break-words leading-tight">{apu.code} {apu.name}</span>
                                                     <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
                                                         <div className="flex flex-col mr-1">
                                                             <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>

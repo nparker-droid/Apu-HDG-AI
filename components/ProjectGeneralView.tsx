@@ -41,21 +41,20 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
           if (parsed && Array.isArray(parsed.apus)) {
             parsed.apus.forEach((apu: APU) => {
               if (apu.items) {
-                Object.keys(apu.items).forEach(cat => {
-                  const category = cat as ItemCategory;
-                  const items = apu.items[category] || [];
+                Object.values(ItemCategory).forEach(category => {
+                  const items = Array.isArray(apu.items?.[category]) ? apu.items[category] : [];
                   items.forEach(item => {
-                    if (item.description && item.description.trim() !== '') {
+                    if (item && item.description && item.description.trim() !== '') {
                       resources.push({
                         id: item.id || crypto.randomUUID(),
                         description: item.description,
-                        unit: item.unit,
-                        unitPrice: item.unitPrice,
+                        unit: item.unit || '',
+                        unitPrice: Number(item.unitPrice) || 0,
                         performance: item.performance,
                         quantity: item.quantity,
                         category,
-                        projectName: p.name,
-                        projectCode: p.code
+                        projectName: p.name || 'Proyecto sin nombre',
+                        projectCode: p.code || 'S/C'
                       });
                     }
                   });
@@ -73,10 +72,11 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   }, [projects, project.id]);
 
   const filteredLibraryResources = useMemo(() => {
+    const term = librarySearch.toLowerCase();
     return otherProjectsResources.filter(r => {
       const matchesCategory = r.category === libraryCategory;
-      const matchesSearch = r.description.toLowerCase().includes(librarySearch.toLowerCase()) ||
-                            r.projectName.toLowerCase().includes(librarySearch.toLowerCase());
+      const matchesSearch = (r.description || '').toLowerCase().includes(term) ||
+                            (r.projectName || '').toLowerCase().includes(term);
       return matchesCategory && matchesSearch;
     });
   }, [otherProjectsResources, libraryCategory, librarySearch]);
@@ -104,11 +104,16 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
             const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
             const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
 
-            const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + (i.total || 0), 0);
-            const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + (i.total || 0), 0);
+            const materialItems = Array.isArray(apu.items?.[ItemCategory.MATERIAL]) ? apu.items[ItemCategory.MATERIAL] : [];
+            const laborItems = Array.isArray(apu.items?.[ItemCategory.MANO_DE_OBRA]) ? apu.items[ItemCategory.MANO_DE_OBRA] : [];
+            const equipmentItems = Array.isArray(apu.items?.[ItemCategory.EQUIPO]) ? apu.items[ItemCategory.EQUIPO] : [];
+            const otherItems = Array.isArray(apu.items?.[ItemCategory.OTROS]) ? apu.items[ItemCategory.OTROS] : [];
+
+            const sMat = materialItems.reduce((s, i) => s + (i.total || 0), 0);
+            const sMoB = laborItems.reduce((s, i) => s + (i.total || 0), 0);
             const sMoBTotal = sMoB * (1 + laws / 100);
-            const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
-            const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
+            const sEq = equipmentItems.reduce((s, i) => s + (i.total || 0), 0);
+            const sOt = otherItems.reduce((s, i) => s + (i.total || 0), 0);
 
             const costoDirectoTotal = sMat + sMoBTotal + sEq + sOt;
             const unitarioNeto = costoDirectoTotal * (1 + (overhead + utility) / 100);
@@ -233,10 +238,15 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                         const overhead = activeApu.useProjectGlobalRates ? project.globalOverhead : activeApu.overheadPercentage;
                         const utility = activeApu.useProjectGlobalRates ? project.globalUtility : activeApu.utilityPercentage;
 
-                        const sMat = activeApu.items[ItemCategory.MATERIAL].reduce((s, i) => s + (i.total || 0), 0);
-                        const sMoB = activeApu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + (i.total || 0), 0);
-                        const sEq = activeApu.items[ItemCategory.EQUIPO].reduce((s, i) => s + (i.total || 0), 0);
-                        const sOt = activeApu.items[ItemCategory.OTROS].reduce((s, i) => s + (i.total || 0), 0);
+                        const materialItems = Array.isArray(activeApu.items?.[ItemCategory.MATERIAL]) ? activeApu.items[ItemCategory.MATERIAL] : [];
+                        const laborItems = Array.isArray(activeApu.items?.[ItemCategory.MANO_DE_OBRA]) ? activeApu.items[ItemCategory.MANO_DE_OBRA] : [];
+                        const equipmentItems = Array.isArray(activeApu.items?.[ItemCategory.EQUIPO]) ? activeApu.items[ItemCategory.EQUIPO] : [];
+                        const otherItems = Array.isArray(activeApu.items?.[ItemCategory.OTROS]) ? activeApu.items[ItemCategory.OTROS] : [];
+
+                        const sMat = materialItems.reduce((s, i) => s + (i.total || 0), 0);
+                        const sMoB = laborItems.reduce((s, i) => s + (i.total || 0), 0);
+                        const sEq = equipmentItems.reduce((s, i) => s + (i.total || 0), 0);
+                        const sOt = otherItems.reduce((s, i) => s + (i.total || 0), 0);
 
                         const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
                         const factorIndirectos = 1 + (overhead + utility) / 100;

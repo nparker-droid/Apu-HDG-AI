@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Sparkles, Loader2, ClipboardPaste, X, Check, Copy } from 'lucide-react';
-import { APUItem, ItemCategory, HistoryItem } from '../types';
-import { getDeviationReasoning, getResourcePriceFromWeb } from '../services/geminiService';
+import { Plus, Trash2, Sparkles, Loader2, ClipboardPaste, X, Check, Copy, HelpCircle } from 'lucide-react';
+import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
+import { getDeviationReasoning, getFieldSuggestion, getResourcePriceFromWeb } from '../services/geminiService';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { formatUnit, formatCLP } from '../services/exportService';
 import { toast } from 'sonner';
@@ -36,6 +36,9 @@ const parseLocaleNumber = (value: string | number) => {
 };
 
 const formatThousands = (value: number) => Math.round(Number(value) || 0).toLocaleString('es-CL');
+const formatDecimalInput = (value: number) => value.toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const sanitizeDecimalInput = (value: string) => value.replace(/[^\d,]/g, '');
+const sanitizeMoneyInput = (value: string) => value.replace(/[^\d]/g, '');
 
 const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/40' : '';
 
@@ -50,6 +53,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
 }) => {
   const [showHistoryForIdx, setShowHistoryForIdx] = useState<number | null>(null);
   const [activeAlert, setActiveAlert] = useState<DeviationAlert | null>(null);
+  const [isAiLoadingField, setIsAiLoadingField] = useState<string | null>(null);
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +61,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
   const [loadingPriceItemIds, setLoadingPriceItemIds] = useState<Record<string, boolean>>({});
   const [hasCopiedItem, setHasCopiedItem] = useState(false);
   const [focusedCell, setFocusedCell] = useState<string | null>(null);
+  const [editingValues, setEditingValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const checkClipboard = () => {
@@ -96,7 +101,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
       };
       
       const isLabor = category === ItemCategory.MANO_DE_OBRA;
-      newItem.total = isLabor ? (newItem.performance || 0) * newItem.unitPrice : newItem.quantity * newItem.unitPrice;
+      newItem.total = isLabor ? newItem.performance * newItem.unitPrice : newItem.quantity * newItem.unitPrice;
       
       onChange([...items, newItem]);
       toast.success(`Recurso "${newItem.description}" pegado con éxito`);
@@ -104,8 +109,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
       toast.error('Error al pegar el recurso');
     }
   };
-
-  const isLabor = category === ItemCategory.MANO_DE_OBRA;
 
   const handleBulkPaste = () => {
     const rows = bulkText
@@ -249,6 +252,20 @@ const SectionTable: React.FC<SectionTableProps> = ({
     onChange(newItems);
   };
 
+  const updateEditingValue = (key: string, rawValue: string, index: number, field: 'quantity' | 'performance' | 'unitPrice') => {
+    const sanitized = field === 'unitPrice' ? sanitizeMoneyInput(rawValue) : sanitizeDecimalInput(rawValue);
+    setEditingValues(prev => ({ ...prev, [key]: sanitized }));
+    updateItem(index, field, sanitized);
+  };
+
+  const clearEditingValue = (key: string) => {
+    setEditingValues(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const handleBlurItem = (idx: number) => {
     const item = items[idx];
     if (item && item.description && item.description.trim() !== "" && onRegisterResource) {
@@ -285,6 +302,8 @@ const SectionTable: React.FC<SectionTableProps> = ({
     }
   };
 
+  const isLabor = category === ItemCategory.MANO_DE_OBRA;
+
   return (
     <div className="overflow-visible" ref={containerRef}>
       <div className="flex justify-between items-center mb-4 px-1">
@@ -296,7 +315,17 @@ const SectionTable: React.FC<SectionTableProps> = ({
           <tr className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
             <th className="pb-1 pl-4">Recurso</th>
             <th className="pb-1 text-center w-20">Unid.</th>
-            <th className="pb-1 text-right w-36">{isLabor ? 'Rend.' : 'Cant.'}</th>
+            <th className="pb-1 text-right w-36">
+              <div className="flex items-center justify-end gap-1">
+                <span>{isLabor ? 'Rend.' : 'Cant.'}</span>
+                <span className="relative group inline-flex">
+                  <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
+                  <span className="pointer-events-none absolute right-0 top-5 z-[120] hidden w-48 rounded-xl bg-[#004071] px-3 py-2 text-[9px] font-bold normal-case tracking-normal text-white shadow-xl group-hover:block">
+                    Use coma para decimales. Ej: 1,25
+                  </span>
+                </span>
+              </div>
+            </th>
             <th className="pb-1 text-right w-40">P. Unit. ($)</th>
             <th className="pb-1 text-right w-32 pr-4">Total</th>
             <th className="pb-1 w-20"></th>
@@ -355,14 +384,14 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   type="text"
                   inputMode="decimal"
                   value={focusedCell === `${item.id}:amount`
-                    ? ((Number(isLabor ? item.performance : item.quantity) || 0) === 0 ? '' : String(isLabor ? item.performance : item.quantity))
-                    : (Number(isLabor ? item.performance : item.quantity) || 0).toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
-                  onChange={e => updateItem(idx, isLabor ? 'performance' : 'quantity', e.target.value)}
+                    ? (editingValues[`${item.id}:amount`] ?? '')
+                    : formatDecimalInput(Number(isLabor ? item.performance : item.quantity) || 0)}
+                  onChange={e => updateEditingValue(`${item.id}:amount`, e.target.value, idx, isLabor ? 'performance' : 'quantity')}
                   onFocus={() => {
                     setFocusedCell(`${item.id}:amount`);
-                    updateItem(idx, isLabor ? 'performance' : 'quantity', 0);
+                    setEditingValues(prev => ({ ...prev, [`${item.id}:amount`]: '' }));
                   }}
-                  onBlur={() => { setFocusedCell(null); checkDeviation(item, 'performance'); handleBlurItem(idx); }}
+                  onBlur={() => { clearEditingValue(`${item.id}:amount`); setFocusedCell(null); checkDeviation(item, 'performance'); handleBlurItem(idx); }}
                   className={`w-full text-right bg-transparent rounded-lg font-mono text-sm font-black text-[#88C13E] ${emptyFieldClass((Number(isLabor ? item.performance : item.quantity) || 0) === 0)}`}
                 />
               </td>
@@ -373,14 +402,14 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     type="text"
                     inputMode="numeric"
                     value={focusedCell === `${item.id}:unitPrice`
-                      ? ((Number(item.unitPrice) || 0) === 0 ? '' : String(item.unitPrice))
+                      ? (editingValues[`${item.id}:unitPrice`] ?? '')
                       : formatThousands(Number(item.unitPrice) || 0)}
-                    onChange={e => updateItem(idx, 'unitPrice', e.target.value)}
+                    onChange={e => updateEditingValue(`${item.id}:unitPrice`, e.target.value, idx, 'unitPrice')}
                     onFocus={() => {
                       setFocusedCell(`${item.id}:unitPrice`);
-                      updateItem(idx, 'unitPrice', 0);
+                      setEditingValues(prev => ({ ...prev, [`${item.id}:unitPrice`]: '' }));
                     }}
-                    onBlur={() => { setFocusedCell(null); checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
+                    onBlur={() => { clearEditingValue(`${item.id}:unitPrice`); setFocusedCell(null); checkDeviation(item, 'unitPrice'); handleBlurItem(idx); }}
                     className="w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black text-slate-600 p-0"
                   />
                   <button
