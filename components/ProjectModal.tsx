@@ -104,3 +104,39 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* SECCIÓN: VALORES ECONÓMICOS */}
+          <div className="space-y-6 pt-4 border-t border-slate-100 transition-colors">
+            <div className="flex items-center gap-2 text-[#004071]">
+              <TrendingUp className="w-4 h-4" />
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">Configuración Económica Global</h4>
+            </div>
+            <div className="bg-[#004071]/5 p-8 rounded-[2rem] grid grid-cols-3 gap-8 border border-[#004071]/10 transition-colors">
+               <div className="space-y-2">
+                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Leyes Sociales (%)</label>
+                  <input type="number" step="0.1" value={formData.globalSocialLaws} onFocus={e => e.currentTarget.select()} onChange={e => setFormData({...formData, globalSocialLaws: parseFloat(e.target.value) || 0})} className={`w-full px-4 py-3 rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors ${emptyFieldClass(!formData.globalSocialLaws)}`} />
+               </div>
+               <div className="space-y-2">
+                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Gastos Generales (%)</label>
+                  <input type="number" step="0.1" value={formData.globalOverhead} onFocus={e => e.currentTarget.select()} onChange={e => setFormData({...formData, globalOverhead: parseFloat(e.target.value) || 0})} className={`w-full px-4 py-3 rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors ${emptyFieldClass(!formData.globalOverhead)}`} />
+               </div>
+               <div className="space-y-2">
+                  <label className="block text-[9px] font-bold text-[#004071] uppercase text-center">Utilidades (%)</label>
+                  <input type="number" step="0.1" value={formData.globalUtility} onFocus={e => e.currentTarget.select()} onChange={e => setFormData({...formData, globalUtility: parseFloat(e.target.value) || 0})} className={`w-full px-4 py-3 rounded-xl text-center font-black text-indigo-600 shadow-sm focus:ring-2 focus:ring-[#88C13E] transition-colors ${emptyFieldClass(!formData.globalUtility)}`} />
+               </div>
+            </div>
+          </div>
+
+          <div className="pt-6">
+            <button type="submit" className="w-full bg-[#004071] hover:bg-[#002D50] text-white font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs">
+              <Save className="w-5 h-5" /> {initialData ? 'Actualizar Ficha de Proyecto' : 'Inicializar Nuevo Proyecto Hidrogestión'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default ProjectModal;

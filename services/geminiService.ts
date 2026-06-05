@@ -126,4 +126,32 @@ Contexto de la partida de obra: "${apuContext}"
 
 Genera una estimación de precio unitario neto en CLP, entero, sin IVA.
 Devuelve solamente JSON válido, sin markdown:
-{"price":12345,"rea
+{"price":12345,"reasoning":"explicación corta en máximo 35 palabras","sources":["url o comercio consultado"]}`
+        }]
+      }],
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    });
+
+    if (response.text) {
+      const parsed = parseJsonObject(response.text);
+      const groundingSources = (response as any).candidates?.[0]?.groundingMetadata?.groundingChunks
+        ?.map((chunk: any) => chunk.web?.uri || chunk.web?.title)
+        ?.filter(Boolean) || [];
+      return {
+        price: Math.round(Number(parsed.price) || 0),
+        reasoning: parsed.reasoning || "Precio estimado con búsqueda web.",
+        sources: Array.from(new Set([...(parsed.sources || []), ...groundingSources]))
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching price from Gemini Web Search:", error);
+  }
+  
+  return {
+    price: 0,
+    reasoning: "No se pudo obtener información en la web para este recurso.",
+    sources: []
+  };
+};
