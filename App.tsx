@@ -229,24 +229,19 @@ const App: React.FC = () => {
             <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
                 {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"><Menu className="w-5 h-5" /></button>}
-                <div className="overflow-hidden">
-                  <h2 className="text-lg font-black text-[#004071] uppercase truncate max-w-md">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-black text-[#004071] uppercase max-w-2xl whitespace-normal break-words leading-tight">
                     {activeApu ? activeApu.name : `ESTRUCTURA GENERAL: ${activeProject.name}`}
                   </h2>
                   <div className="flex items-center gap-3">
                     <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name}</p>
-                    {lastSaved && (
-                      <span className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase bg-slate-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                        <Clock className="w-2.5 h-2.5 mr-1" /> {new Date(lastSaved).toLocaleTimeString()}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {lastSaved && (
                   <span className="hidden md:flex items-center gap-1 text-[8px] text-slate-500 font-black uppercase bg-slate-100 px-3 py-2 rounded-xl whitespace-nowrap">
-                    <Clock className="w-3 h-3 text-[#88C13E]" /> Ultimo respaldo {new Date(lastSaved).toLocaleTimeString()}
+                    <Clock className="w-3 h-3 text-[#88C13E]" /> Último respaldo {new Date(lastSaved).toLocaleTimeString()}
                   </span>
                 )}
                 <button

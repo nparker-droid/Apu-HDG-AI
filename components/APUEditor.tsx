@@ -29,7 +29,7 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
   const handleChange = (field: string, value: any) => {
     let finalValue = value;
     if (['overheadPercentage', 'utilityPercentage', 'socialLawsPercentage', 'quantity', 'divisorQuantity'].includes(field)) {
-      finalValue = parseFloat(value) || 0;
+      finalValue = parseFloat(String(value).replace(',', '.')) || 0;
     }
     onUpdate({ ...apu, [field]: finalValue });
   };
@@ -45,11 +45,9 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
   const subEq = calculateSubtotal(ItemCategory.EQUIPO);
   const subOt = calculateSubtotal(ItemCategory.OTROS);
 
-  // Cálculos solicitados
   const costoDirectoUnitario = subMat + subMoTotal + subEq + subOt;
   const costoNetoUnitario = costoDirectoUnitario * (1 + (overhead + utility) / 100);
 
-  // Lógica de división de precio unitario
   const displayUnitPrice = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
     ? costoNetoUnitario / (apu.divisorQuantity || 1)
     : costoNetoUnitario;
@@ -81,7 +79,6 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-32">
-      {/* HEADER DE TOTALES MEJORADO */}
       <div className="bg-[#004071] text-white rounded-[2rem] p-8 shadow-2xl flex flex-wrap gap-8 items-center relative overflow-hidden border border-transparent">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
 
@@ -108,7 +105,6 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
         </div>
       </div>
 
-      {/* RESUMEN DE COSTOS DIRECTOS POR CATEGORÍA */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'C. Directo Materiales', val: subMat, icon: <Box className="w-3 h-3" />, color: 'text-blue-500' },
@@ -127,7 +123,6 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
       </div>
 
       <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 space-y-8">
-        {/* IDENTIFICACIÓN PARTIDA */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-2 space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Hash className="w-3 h-3" /> Ítem</label>
@@ -136,7 +131,13 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
           <div className="lg:col-span-6 space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Descripción Técnica</label>
             <div className="relative group">
-              <input type="text" value={apu.name} onChange={e => handleChange('name', e.target.value)} placeholder="Partida..." className={`w-full text-xl font-black rounded-xl px-6 py-3 text-slate-800 ${emptyFieldClass(!apu.name)}`} />
+              <textarea
+                rows={2}
+                value={apu.name}
+                onChange={e => handleChange('name', e.target.value)}
+                placeholder="Partida..."
+                className={`w-full text-xl font-black rounded-xl px-6 pr-36 py-3 text-slate-800 resize-none leading-tight ${emptyFieldClass(!apu.name)}`}
+              />
               <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#004071] hover:bg-[#002D50] text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
                 {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-[#D9E021]" />} Analizar IA
               </button>
@@ -144,11 +145,10 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
           </div>
           <div className="lg:col-span-4 grid grid-cols-2 gap-4">
             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600 ${emptyFieldClass(!apu.unit)}`} /></div>
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="number" step="0.001" value={apu.quantity} onFocus={e => e.currentTarget.select()} onChange={e => handleChange('quantity', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
+            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="text" inputMode="decimal" value={String(apu.quantity).replace('.', ',')} onFocus={e => e.currentTarget.select()} onChange={e => handleChange('quantity', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
           </div>
         </div>
 
-        {/* SECCIÓN CONFIGURACIÓN COSTOS INDIRECTOS Y DIVISIÓN */}
         <div className="border-t border-slate-100 pt-4 space-y-4">
           <div className="flex items-center gap-6">
             <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[9px] font-black text-slate-400 hover:text-[#004071] uppercase tracking-widest">
@@ -167,8 +167,9 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
                 <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
                   <span className="text-[9px] font-black text-slate-400 uppercase">por:</span>
                   <input
-                    type="number"
-                    value={apu.divisorQuantity || ''}
+                    type="text"
+                    inputMode="decimal"
+                    value={apu.divisorQuantity ? String(apu.divisorQuantity).replace('.', ',') : ''}
                     onChange={e => handleChange('divisorQuantity', e.target.value)}
                     placeholder="Cantidad..."
                     className="w-20 py-1 bg-white border border-slate-200 rounded-lg text-center text-[10px] font-black text-[#004071]"
@@ -202,7 +203,6 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
           )}
         </div>
 
-        {/* TABLA DE RECURSOS */}
         <div className="border-t border-slate-100 pt-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl">

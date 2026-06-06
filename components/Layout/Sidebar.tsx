@@ -65,6 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         id: string;
         name: string;
     } | null>(null);
+    const [chapterActionMenu, setChapterActionMenu] = useState<{ projectId: string; chapterId: string } | null>(null);
 
     const handleConfirmAction = () => {
         if (!confirmDelete) return;
@@ -172,15 +173,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 </div>
 
                                 {chapters.filter(c => c.projectId === project.id).map(chapter => (
-                                    <div key={chapter.id} className="space-y-1">
+                                    <div key={chapter.id} className="space-y-1 relative">
                                         <div className="flex flex-col p-2 bg-white border border-slate-100 rounded-xl space-y-2 group/chapter">
                                             <div className="flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
                                                 <span className="truncate pr-1">{chapter.code}. {chapter.name}</span>
                                                 <div className="flex items-center gap-1 opacity-0 group-hover/chapter:opacity-100 transition-opacity">
                                                     <button onClick={() => moveChapter(chapter.id, 'up')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronUp className="w-3 h-3" /></button>
                                                     <button onClick={() => moveChapter(chapter.id, 'down')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronDown className="w-3 h-3" /></button>
-                                                    <button onClick={() => onCreateApu(project.id, chapter.id)} className="text-[#004071] hover:text-[#88C13E] p-0.5"><Plus className="w-3 h-3" /></button>
-                                                    <button onClick={() => onLibraryOpen(chapter.id)} className="text-[#88C13E] hover:text-[#004071] p-0.5"><BookOpen className="w-3 h-3" /></button>
+                                                    <button
+                                                        onClick={() => setChapterActionMenu(prev => prev?.chapterId === chapter.id ? null : { projectId: project.id, chapterId: chapter.id })}
+                                                        className="text-[#004071] hover:text-[#88C13E] p-0.5"
+                                                        title="Agregar partida"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
@@ -193,6 +199,28 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        {chapterActionMenu?.chapterId === chapter.id && (
+                                            <div className="absolute right-3 top-8 z-30 w-44 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 animate-in fade-in zoom-in-95">
+                                                <button
+                                                    onClick={() => {
+                                                        onCreateApu(chapterActionMenu.projectId, chapterActionMenu.chapterId);
+                                                        setChapterActionMenu(null);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#004071] hover:bg-slate-50"
+                                                >
+                                                    APU nuevo
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        onLibraryOpen(chapterActionMenu.chapterId);
+                                                        setChapterActionMenu(null);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#88C13E] hover:bg-slate-50"
+                                                >
+                                                    Desde biblioteca
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="space-y-1">
                                             {apus.filter(a => a.chapterId === chapter.id).map(apu => (
                                                 <div
