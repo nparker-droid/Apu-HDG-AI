@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { X, BookOpen, Search, Plus, Layers, Star, Info, Copy } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, BookOpen, Search, Plus, Layers, Star, Info, Copy, Edit3, Save, Trash2 } from 'lucide-react';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { APU, Project, ItemCategory, HistoryItem } from '../types';
 import { formatCLP } from '../services/exportService';
@@ -14,6 +14,28 @@ interface LibraryModalProps {
   mode?: 'select' | 'browse';
 }
 
+interface CatalogResource extends HistoryItem {
+  id: string;
+  source: 'user' | 'project' | 'standard';
+  sourceLabel: string;
+}
+
+const USER_RESOURCE_KEY = 'apu_user_resource_library';
+
+const parseMoney = (value: string | number) => {
+  if (typeof value === 'number') return value;
+  return parseFloat(value.replace(/\s/g, '').replace(/\$/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+};
+
+const emptyResourceForm = {
+  id: '',
+  description: '',
+  unit: '',
+  unitPrice: '',
+  category: ItemCategory.MATERIAL,
+  performance: '1'
+};
+
 const LibraryModal: React.FC<LibraryModalProps> = ({
   onClose,
   onSelect,
@@ -23,8 +45,22 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
   mode = 'select'
 }) => {
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'apus' | 'resources'>('apus');
+  const [activeTab, setActiveTab] = useState<'apus' | 'resources'>(mode === 'select' ? 'apus' : 'apus');
   const [resourceCategory, setResourceCategory] = useState<ItemCategory>(ItemCategory.MATERIAL);
+  const [userResources, setUserResources] = useState<CatalogResource[]>(() => {
+    try {
+      const saved = localStorage.getItem(USER_RESOURCE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showResourceForm, setShowResourceForm] = useState(false);
+  const [resourceForm, setResourceForm] = useState(emptyResourceForm);
+
+  useEffect(() => {
+    localStorage.setItem(USER_RESOURCE_KEY, JSON.stringify(userResources));
+  }, [userResources]);
 
   const otherProjectsApus = useMemo(() => {
     if (!projects || !activeProjectId) return [];
@@ -37,7 +73,7 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
             const parsed = JSON.parse(saved);
             if (parsed && Array.isArray(parsed.apus)) {
               parsed.apus.forEach((apu: APU) => {
-                list.push({ ...apu, projectName: p.name } as any);
+                list.push({ ...apu, projectName: p.name, projectCode: p.code } as any);
               });
             }
           } catch (e) {
@@ -49,61 +85,89 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
     return list;
   }, [projects, activeProjectId]);
 
+  const apuMatchesSearch = (apu: Partial<APU>, term: string) => {
+    if (!term) return true;
+    const projectName = ((apu as any).projectName || '').toLowerCase();
+    const projectCode = ((apu as any).projectCode || '').toLowerCase();
+    const basicText = [
+      apu.name,
+      apu.code,
+      apu.unit,
+      projectName,
+      projectCode
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    const resourceText = apu.items
+      ? Object.values(ItemCategory).flatMap(category => apu.items?.[category] || [])
+          .map(item => `${item.description || ''} ${item.unit || ''}`)
+          .join(' ')
+          .toLowerCase()
+      : '';
+
+    return `${basicText} ${resourceText}`.includes(term);
+  };
+
   const filteredOtherProjects = useMemo(() => {
-    const term = search.toLowerCase();
-    return otherProjectsApus.filter(apu =>
-      apu.name?.toLowerCase().includes(term) ||
-      apu.code?.toLowerCase().includes(term)
-    );
+    const term = search.toLowerCase().trim();
+    return otherProjectsApus.filter(apu => apuMatchesSearch(apu, term));
   }, [search, otherProjectsApus]);
 
   const filteredStandard = useMemo(() => {
-    const term = search.toLowerCase();
-    return STANDARD_LIBRARY.filter(apu =>
-      apu.name?.toLowerCase().includes(term) ||
-      apu.code?.toLowerCase().includes(term)
-    );
+    const term = search.toLowerCase().trim();
+    return STANDARD_LIBRARY.filter(apu => apuMatchesSearch(apu, term));
   }, [search]);
 
   const filteredProject = useMemo(() => {
-    const term = search.toLowerCase();
-    return projectApus.filter(apu =>
-      apu.name?.toLowerCase().includes(term) ||
-      apu.code?.toLowerCase().includes(term)
-    );
+    const term = search.toLowerCase().trim();
+    return projectApus.filter(apu => apuMatchesSearch(apu, term));
   }, [search, projectApus]);
 
   const resourcesCatalog = useMemo(() => {
-    const map = new Map<string, HistoryItem>();
+    const map = new Map<string, CatalogResource>();
+
+    userResources.forEach(item => {
+      const key = `${item.category}-${item.description.toLowerCase().trim()}-${item.unit || ''}`;
+      map.set(key, { ...item, source: 'user', sourceLabel: 'Biblioteca del usuario' });
+    });
+
     [...projectApus, ...otherProjectsApus, ...STANDARD_LIBRARY].forEach(apu => {
       if (!apu.items) return;
       Object.values(ItemCategory).forEach(category => {
-        const items = apu.items[category] || [];
+        const items = apu.items?.[category] || [];
         items.forEach(item => {
           if (!item.description || item.description.trim() === '') return;
           const key = `${category}-${item.description.toLowerCase().trim()}-${item.unit || ''}`;
           if (!map.has(key)) {
+            const sourceLabel = (apu as any).projectName || apu.name || 'Catalogo estandar';
             map.set(key, {
+              id: item.id || crypto.randomUUID(),
               description: item.description,
               unit: item.unit || '',
               unitPrice: Number(item.unitPrice) || 0,
               category,
               performance: Number(item.performance) || 1,
-              chapterName: (apu as any).projectName || apu.name || 'Catalogo'
+              chapterName: sourceLabel,
+              source: (apu as any).projectName ? 'project' : 'standard',
+              sourceLabel
             });
           }
         });
       });
     });
+
     return Array.from(map.values());
-  }, [projectApus, otherProjectsApus]);
+  }, [projectApus, otherProjectsApus, userResources]);
 
   const filteredResources = useMemo(() => {
     const term = search.toLowerCase().trim();
     return resourcesCatalog
       .filter(item => item.category === resourceCategory)
-      .filter(item => !term || item.description.toLowerCase().includes(term) || item.unit.toLowerCase().includes(term))
-      .slice(0, 120);
+      .filter(item => !term ||
+        item.description.toLowerCase().includes(term) ||
+        item.unit.toLowerCase().includes(term) ||
+        item.sourceLabel.toLowerCase().includes(term)
+      )
+      .slice(0, 160);
   }, [resourcesCatalog, resourceCategory, search]);
 
   const handleCopyResource = (item: HistoryItem) => {
@@ -115,6 +179,57 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
       performance: item.performance || 1
     }));
     toast.success(`Recurso "${item.description}" copiado`);
+  };
+
+  const startNewResource = () => {
+    setResourceForm({ ...emptyResourceForm, category: resourceCategory });
+    setShowResourceForm(true);
+  };
+
+  const startEditResource = (item: CatalogResource) => {
+    setResourceForm({
+      id: item.source === 'user' ? item.id : '',
+      description: item.description,
+      unit: item.unit,
+      unitPrice: String(Math.round(item.unitPrice || 0)),
+      category: item.category,
+      performance: String(item.performance || 1)
+    });
+    setResourceCategory(item.category);
+    setShowResourceForm(true);
+  };
+
+  const saveResource = () => {
+    if (!resourceForm.description.trim()) {
+      toast.error('Ingresa una descripcion para el recurso.');
+      return;
+    }
+
+    const resource: CatalogResource = {
+      id: resourceForm.id || crypto.randomUUID(),
+      description: resourceForm.description.trim(),
+      unit: resourceForm.unit.trim() || 'UN',
+      unitPrice: parseMoney(resourceForm.unitPrice),
+      category: resourceForm.category,
+      performance: parseMoney(resourceForm.performance) || 1,
+      chapterName: 'Biblioteca del usuario',
+      source: 'user',
+      sourceLabel: 'Biblioteca del usuario'
+    };
+
+    setUserResources(prev => {
+      const exists = prev.some(item => item.id === resource.id);
+      return exists ? prev.map(item => item.id === resource.id ? resource : item) : [resource, ...prev];
+    });
+    setResourceCategory(resource.category);
+    setShowResourceForm(false);
+    setResourceForm(emptyResourceForm);
+    toast.success('Recurso guardado en biblioteca');
+  };
+
+  const deleteUserResource = (id: string) => {
+    setUserResources(prev => prev.filter(item => item.id !== id));
+    toast.success('Recurso eliminado de biblioteca');
   };
 
   return (
@@ -144,7 +259,7 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, codigo, recurso o unidad..."
+              placeholder="Buscar por nombre, codigo, proyecto, recurso o unidad..."
               className="w-full pl-14 pr-6 py-5 bg-white border-2 border-slate-100 focus:border-[#004071] rounded-3xl text-sm font-bold shadow-inner transition-all outline-none"
             />
           </div>
@@ -194,29 +309,83 @@ const LibraryModal: React.FC<LibraryModalProps> = ({
 
           {mode === 'browse' && activeTab === 'resources' && (
             <div className="space-y-5">
-              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl w-max max-w-full overflow-x-auto">
-                {Object.values(ItemCategory).map(category => (
-                  <button
-                    key={category}
-                    onClick={() => setResourceCategory(category)}
-                    className={`px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap ${resourceCategory === category ? 'bg-[#004071] text-white shadow-md' : 'text-slate-400 hover:bg-white'}`}
-                  >
-                    {category}
-                  </button>
-                ))}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl w-max max-w-full overflow-x-auto">
+                  {Object.values(ItemCategory).map(category => (
+                    <button
+                      key={category}
+                      onClick={() => setResourceCategory(category)}
+                      className={`px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap ${resourceCategory === category ? 'bg-[#004071] text-white shadow-md' : 'text-slate-400 hover:bg-white'}`}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={startNewResource} className="flex items-center justify-center gap-2 bg-[#88C13E] hover:bg-[#76aa34] text-white px-4 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-md transition-colors">
+                  <Plus className="w-4 h-4" /> Agregar recurso
+                </button>
               </div>
+
+              {showResourceForm && (
+                <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-5 grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <input
+                    value={resourceForm.description}
+                    onChange={e => setResourceForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Descripcion del recurso"
+                    className="md:col-span-5 px-4 py-3 bg-white rounded-xl border border-slate-100 text-xs font-bold outline-none focus:border-[#004071]"
+                  />
+                  <input
+                    value={resourceForm.unit}
+                    onChange={e => setResourceForm(prev => ({ ...prev, unit: e.target.value }))}
+                    placeholder="Unidad"
+                    className="md:col-span-2 px-4 py-3 bg-white rounded-xl border border-slate-100 text-xs font-bold outline-none focus:border-[#004071]"
+                  />
+                  <input
+                    value={resourceForm.unitPrice}
+                    onChange={e => setResourceForm(prev => ({ ...prev, unitPrice: e.target.value }))}
+                    placeholder="Precio"
+                    inputMode="numeric"
+                    className="md:col-span-2 px-4 py-3 bg-white rounded-xl border border-slate-100 text-xs font-bold outline-none focus:border-[#004071]"
+                  />
+                  <select
+                    value={resourceForm.category}
+                    onChange={e => setResourceForm(prev => ({ ...prev, category: e.target.value as ItemCategory }))}
+                    className="md:col-span-2 px-4 py-3 bg-white rounded-xl border border-slate-100 text-xs font-black outline-none focus:border-[#004071]"
+                  >
+                    {Object.values(ItemCategory).map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                  <div className="md:col-span-1 flex gap-1">
+                    <button onClick={saveResource} className="flex-1 bg-[#004071] text-white rounded-xl flex items-center justify-center">
+                      <Save className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setShowResourceForm(false)} className="flex-1 bg-white text-slate-400 rounded-xl flex items-center justify-center">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-3">
                 {filteredResources.length > 0 ? filteredResources.map((item, idx) => (
-                  <div key={`${item.description}-${idx}`} className="flex items-center justify-between p-5 bg-white rounded-3xl border border-slate-100 shadow-sm">
+                  <div key={`${item.source}-${item.id}-${idx}`} className="flex items-center justify-between p-5 bg-white rounded-3xl border border-slate-100 shadow-sm">
                     <div className="overflow-hidden pr-4">
-                      <p className="text-sm font-black text-slate-700 truncate">{item.description}</p>
+                      <p className="text-sm font-black text-slate-700 whitespace-normal break-words">{item.description}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Unidad: {item.unit || 'UN'} | P. Unitario: {formatCLP(item.unitPrice)}</p>
-                      {item.chapterName && <p className="text-[9px] font-black text-[#88C13E] uppercase tracking-widest mt-1">{item.chapterName}</p>}
+                      <p className="text-[9px] font-black text-[#88C13E] uppercase tracking-widest mt-1">{item.sourceLabel}</p>
                     </div>
-                    <button onClick={() => handleCopyResource(item)} className="bg-[#88C13E] hover:bg-[#76aa34] text-white p-3 rounded-2xl transition-colors shadow-inner">
-                      <Copy className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => startEditResource(item)} className="bg-slate-100 hover:bg-slate-200 text-[#004071] p-3 rounded-2xl transition-colors shadow-inner" title="Editar o guardar en biblioteca">
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      {item.source === 'user' && (
+                        <button onClick={() => deleteUserResource(item.id)} className="bg-red-50 hover:bg-red-100 text-red-500 p-3 rounded-2xl transition-colors shadow-inner" title="Eliminar recurso">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button onClick={() => handleCopyResource(item)} className="bg-[#88C13E] hover:bg-[#76aa34] text-white p-3 rounded-2xl transition-colors shadow-inner" title="Copiar recurso">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 )) : (
                   <EmptyState text="No se encontraron recursos" />
@@ -270,7 +439,7 @@ const LibraryItem: React.FC<LibraryItemProps> = ({ apu, onSelect, isProject, isO
           {isProject ? 'Referencia Proyecto' : isOtherProject ? `Proyecto: ${projectName}` : `Referencia: ${apu.code || 'STD'}`}
         </span>
       </div>
-      <span className={`text-md font-bold truncate transition-colors ${mode === 'select' ? 'text-slate-700 group-hover:text-white' : 'text-slate-700'}`}>{apu.name}</span>
+      <span className={`text-md font-bold whitespace-normal break-words transition-colors ${mode === 'select' ? 'text-slate-700 group-hover:text-white' : 'text-slate-700'}`}>{apu.name}</span>
       <span className={`text-[10px] font-medium italic transition-colors ${mode === 'select' ? 'text-slate-400 group-hover:text-white/60' : 'text-slate-400'}`}>Unidad: {apu.unit}</span>
     </div>
     {mode === 'select' && (
