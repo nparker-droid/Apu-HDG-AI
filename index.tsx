@@ -1,62 +1,15 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APU Master AI - Hidrogestión</title>
-
-     <!-- PWA y Meta Tags de Aplicación -->
-    <meta name="theme-color" content="#004071">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="APU Master">
-    <link rel="manifest" href="/manifest.json">
-    
-    <!-- Iconos de aplicacion -->
-    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="/icons/icon-48.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
-
-    
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
-    
-    <!-- Librerías de Exportación (PDF y Excel) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "@google/genai": "https://esm.sh/@google/genai@1.39.0",
-    "lucide-react": "https://esm.sh/lucide-react@0.475.0?external=react",
-    "sonner": "https://esm.sh/sonner@2.0.1?external=react,react-dom",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "path": "https://esm.sh/path@^0.12.7"
-  }
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
 }
-</script>
 
-    <link rel="stylesheet" href="./index.css">
-    
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
-</head>
-<body class="bg-gray-50 text-gray-900">
-    <div id="root"></div>
-    
-    <script type="module" src="./index.tsx"></script>
-</body>
-</html>
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
