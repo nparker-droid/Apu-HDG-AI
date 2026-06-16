@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
@@ -286,6 +286,7 @@ const App: React.FC = () => {
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
+        onRenameChapter={(id, name) => setChapters(prev => prev.map(c => c.id === id ? { ...c, name } : c))}
       />
 
       <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-slate-50">
@@ -310,42 +311,80 @@ const App: React.FC = () => {
                   </span>
                 )}
 
-                {/* Google Drive sync */}
-                <div className="flex items-center gap-1">
-                  {driveConnected ? (
-                    <>
-                      <button
-                        onClick={handleDriveSave}
-                        disabled={driveStatus === 'syncing'}
-                        title="Guardar en Google Drive"
-                        className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 uppercase tracking-widest transition-all disabled:opacity-60"
-                      >
-                        {driveStatus === 'syncing' ? <Loader2 className="w-3 h-3 animate-spin" /> : driveStatus === 'synced' ? <Check className="w-3 h-3" /> : <CloudUpload className="w-3 h-3" />}
-                        Drive
-                      </button>
-                      <button
-                        onClick={handleDriveLoad}
-                        disabled={driveStatus === 'syncing'}
-                        title="Restaurar desde Google Drive"
-                        className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 uppercase tracking-widest transition-all disabled:opacity-60"
-                      >
-                        <CloudDownload className="w-3 h-3" />
-                      </button>
-                      <button onClick={handleDriveDisconnect} title="Desconectar Drive" className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                        <CloudOff className="w-3 h-3" />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleDriveConnect}
-                      disabled={driveStatus === 'syncing'}
-                      title="Conectar Google Drive para sincronización en la nube"
-                      className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 uppercase tracking-widest transition-all disabled:opacity-60"
-                    >
-                      {driveStatus === 'syncing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudUpload className="w-3 h-3" />}
-                      Drive
-                    </button>
-                  )}
+                {/* Google Drive — botón único con hover card */}
+                <div className="relative group/drive">
+                  <button
+                    onClick={driveConnected ? undefined : handleDriveConnect}
+                    disabled={driveStatus === 'syncing'}
+                    className={`flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl uppercase tracking-widest transition-all disabled:opacity-60 select-none ${
+                      driveConnected
+                        ? 'bg-blue-50 text-blue-600 cursor-default'
+                        : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 cursor-pointer'
+                    }`}
+                  >
+                    {driveStatus === 'syncing'
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : driveStatus === 'synced'
+                        ? <Check className="w-3 h-3 text-green-500" />
+                        : <CloudUpload className="w-3 h-3" />}
+                    Drive
+                    {driveConnected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 ml-0.5" />}
+                  </button>
+
+                  {/* Hover card con acciones y ubicación */}
+                  <div className="absolute right-0 top-full mt-2 w-60 bg-slate-900 text-white rounded-2xl shadow-2xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
+                    <div className="flex items-start gap-2 pb-2 border-b border-slate-700 mb-2">
+                      <FolderOpen className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Ubicación del respaldo</p>
+                        <p className="text-[9px] text-slate-200 font-bold mt-0.5">Mi unidad / APU Hidrogestion</p>
+                        <p className="text-[8px] text-slate-500">apu-engine-backup.json</p>
+                      </div>
+                    </div>
+                    {driveConnected ? (
+                      <>
+                        {getLastSyncTime() && (
+                          <p className="text-[8px] text-slate-500 mb-2">
+                            Último backup: {new Date(getLastSyncTime()!).toLocaleString('es-CL')}
+                          </p>
+                        )}
+                        <div className="space-y-1">
+                          <button
+                            onClick={handleDriveSave}
+                            disabled={driveStatus === 'syncing'}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-60"
+                          >
+                            <CloudUpload className="w-3 h-3" /> Guardar en Drive
+                          </button>
+                          <button
+                            onClick={handleDriveLoad}
+                            disabled={driveStatus === 'syncing'}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-700 hover:bg-slate-600 text-white transition-all disabled:opacity-60"
+                          >
+                            <CloudDownload className="w-3 h-3" /> Restaurar desde Drive
+                          </button>
+                          <button
+                            onClick={handleDriveDisconnect}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-400 hover:bg-red-900/30 transition-all"
+                          >
+                            <CloudOff className="w-3 h-3" /> Desconectar
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[8px] text-slate-400 mb-2">Conecta tu cuenta de Google para guardar un respaldo automático en Drive.</p>
+                        <button
+                          onClick={handleDriveConnect}
+                          disabled={driveStatus === 'syncing'}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-60"
+                        >
+                          {driveStatus === 'syncing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudUpload className="w-3 h-3" />}
+                          Conectar Google Drive
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <button

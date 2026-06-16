@@ -145,28 +145,39 @@ const SectionTable: React.FC<SectionTableProps> = ({
     toast.success(`${parsedItems.length} recursos pegados correctamente`);
   };
 
+  const formatPriceSources = (sources: string[] | undefined): string => {
+    if (!sources || sources.length === 0) return '';
+    const domains = sources.slice(0, 4).map(s => {
+      try { return new URL(s).hostname.replace(/^www\./, ''); }
+      catch { return s.length > 40 ? s.substring(0, 40) + '…' : s; }
+    });
+    return `Fuentes: ${domains.join(', ')}`;
+  };
+
   const handleGeneratePrice = async (item: APUItem, index: number) => {
     if (!item.description || item.description.trim() === '') {
       toast.error('Por favor, ingresa una descripción para el recurso primero.');
       return;
     }
-    
+
     setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: true }));
-    toast.info(`Buscando precios en la web para "${item.description}"...`);
-    
+    const loadingToastId = toast.loading(`Buscando precios en la web para "${item.description}"…`);
+
     try {
       const result = await getResourcePriceFromWeb(item.description, item.unit || 'UN', apuContext || '');
+      toast.dismiss(loadingToastId);
       if (result && result.price > 0) {
         updateItem(index, 'unitPrice', result.price);
-        
         toast.success(`Precio sugerido: ${formatCLP(result.price)}`, {
-          description: `${result.reasoning} ${result.sources && result.sources.length > 0 ? `(Fuentes: ${result.sources.join(', ')})` : ''}`,
-          duration: 8000
+          description: `${result.reasoning}${result.sources?.length ? '\n' + formatPriceSources(result.sources) : ''}`,
+          duration: 12000,
+          closeButton: true,
         });
       } else {
         toast.warning('La IA no pudo encontrar un precio preciso. Por favor ingresa el precio manualmente.');
       }
     } catch (error) {
+      toast.dismiss(loadingToastId);
       console.error(error);
       toast.error('Error al consultar el precio con IA.');
     } finally {

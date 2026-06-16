@@ -45,6 +45,7 @@ interface SidebarProps {
     onDeleteProject: (id: string) => void;
     onDuplicateProject: (id: string) => void;
     moveApu: (id: string, dir: 'up' | 'down') => void;
+    onRenameChapter: (id: string, name: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -56,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onShareProject, handleImport,
     onDeleteProject, onDuplicateProject,
-    moveApu
+    moveApu, onRenameChapter
 }) => {
     const activeProject = projects.find(p => p.id === currentProjectId);
 
@@ -66,6 +67,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         name: string;
     } | null>(null);
     const [chapterActionMenu, setChapterActionMenu] = useState<{ projectId: string; chapterId: string } | null>(null);
+    const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+    const [editingChapterName, setEditingChapterName] = useState('');
 
     const handleConfirmAction = () => {
         if (!confirmDelete) return;
@@ -176,8 +179,32 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     <div key={chapter.id} className="space-y-1 relative">
                                         <div className="flex flex-col p-2 bg-white border border-slate-100 rounded-xl space-y-2 group/chapter">
                                             <div className="flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                <span className="truncate pr-1">{chapter.code}. {chapter.name}</span>
-                                                <div className="flex items-center gap-1 opacity-0 group-hover/chapter:opacity-100 transition-opacity">
+                                                {editingChapterId === chapter.id ? (
+                                                    <input
+                                                        autoFocus
+                                                        value={editingChapterName}
+                                                        onChange={e => setEditingChapterName(e.target.value)}
+                                                        onBlur={() => {
+                                                            if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim());
+                                                            setEditingChapterId(null);
+                                                        }}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') { if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim()); setEditingChapterId(null); }
+                                                            if (e.key === 'Escape') setEditingChapterId(null);
+                                                        }}
+                                                        className="flex-1 text-[9px] font-black text-slate-600 bg-slate-50 border border-[#004071] rounded px-1.5 py-0.5 outline-none uppercase tracking-widest min-w-0"
+                                                    />
+                                                ) : (
+                                                    <span className="truncate pr-1 flex-1">{chapter.code}. {chapter.name}</span>
+                                                )}
+                                                <div className="flex items-center gap-1 opacity-0 group-hover/chapter:opacity-100 transition-opacity shrink-0">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); }}
+                                                        className="text-slate-300 hover:text-[#004071] p-0.5"
+                                                        title="Renombrar capítulo"
+                                                    >
+                                                        <Edit3 className="w-3 h-3" />
+                                                    </button>
                                                     <button onClick={() => moveChapter(chapter.id, 'up')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronUp className="w-3 h-3" /></button>
                                                     <button onClick={() => moveChapter(chapter.id, 'down')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronDown className="w-3 h-3" /></button>
                                                     <button
