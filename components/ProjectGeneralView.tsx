@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { FileText, TrendingUp, DollarSign, PieChart, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { Project, Chapter, APU, ItemCategory } from '../types';
+import { Project, Chapter, APU } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
+import { calculateApuTotals } from '../lib/apuCalculations';
 
 interface ProjectGeneralViewProps {
   project: Project;
@@ -21,36 +22,13 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
         const chapterApus = apus
           .filter(a => a.chapterId === chapter.id)
           .map(apu => {
-            const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
-            const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
-            const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
-
-            const materialItems = Array.isArray(apu.items?.[ItemCategory.MATERIAL]) ? apu.items[ItemCategory.MATERIAL] : [];
-            const laborItems = Array.isArray(apu.items?.[ItemCategory.MANO_DE_OBRA]) ? apu.items[ItemCategory.MANO_DE_OBRA] : [];
-            const equipmentItems = Array.isArray(apu.items?.[ItemCategory.EQUIPO]) ? apu.items[ItemCategory.EQUIPO] : [];
-            const otherItems = Array.isArray(apu.items?.[ItemCategory.OTROS]) ? apu.items[ItemCategory.OTROS] : [];
-
-            const sMat = materialItems.reduce((s, i) => s + (i.total || 0), 0);
-            const sMoB = laborItems.reduce((s, i) => s + (i.total || 0), 0);
-            const sMoBTotal = sMoB * (1 + laws / 100);
-            const sEq = equipmentItems.reduce((s, i) => s + (i.total || 0), 0);
-            const sOt = otherItems.reduce((s, i) => s + (i.total || 0), 0);
-
-            const costoDirectoTotal = sMat + sMoBTotal + sEq + sOt;
-            const unitarioNeto = costoDirectoTotal * (1 + (overhead + utility) / 100);
-
-            const displayPU = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
-              ? unitarioNeto / (apu.divisorQuantity || 1)
-              : unitarioNeto;
-
-            const subtotal = displayPU * (Number(apu.quantity) || 0);
-
-            return { ...apu, displayPU, subtotal };
+            const { precioUnitarioNeto } = calculateApuTotals(apu, project);
+            const subtotal = precioUnitarioNeto * (Number(apu.quantity) || 0);
+            return { ...apu, displayPU: precioUnitarioNeto, subtotal };
           });
 
-        const totalChapter = chapterApus.reduce((s, a) => s + (a as any).subtotal, 0);
+        const totalChapter = chapterApus.reduce((s, a) => s + a.subtotal, 0);
         totalNetoProyecto += totalChapter;
-
         return { ...chapter, apus: chapterApus, totalChapter };
       });
 
@@ -75,29 +53,8 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   };
 
   const getApuStats = (activeApu: APU) => {
-    const laws = activeApu.useProjectGlobalRates ? project.globalSocialLaws : activeApu.socialLawsPercentage;
-    const overhead = activeApu.useProjectGlobalRates ? project.globalOverhead : activeApu.overheadPercentage;
-    const utility = activeApu.useProjectGlobalRates ? project.globalUtility : activeApu.utilityPercentage;
-
-    const materialItems = Array.isArray(activeApu.items?.[ItemCategory.MATERIAL]) ? activeApu.items[ItemCategory.MATERIAL] : [];
-    const laborItems = Array.isArray(activeApu.items?.[ItemCategory.MANO_DE_OBRA]) ? activeApu.items[ItemCategory.MANO_DE_OBRA] : [];
-    const equipmentItems = Array.isArray(activeApu.items?.[ItemCategory.EQUIPO]) ? activeApu.items[ItemCategory.EQUIPO] : [];
-    const otherItems = Array.isArray(activeApu.items?.[ItemCategory.OTROS]) ? activeApu.items[ItemCategory.OTROS] : [];
-
-    const sMat = materialItems.reduce((s, i) => s + (i.total || 0), 0);
-    const sMoB = laborItems.reduce((s, i) => s + (i.total || 0), 0);
-    const sEq = equipmentItems.reduce((s, i) => s + (i.total || 0), 0);
-    const sOt = otherItems.reduce((s, i) => s + (i.total || 0), 0);
-
-    const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
-    const factorIndirectos = 1 + (overhead + utility) / 100;
-    const costoNetoTotal = costoDirectoTotal * factorIndirectos;
-
-    const displayPU = (activeApu.divideUnitPrice && (activeApu.divisorQuantity || 0) > 0)
-      ? costoNetoTotal / (activeApu.divisorQuantity || 1)
-      : costoNetoTotal;
-
-    return { displayPU, subtotal: displayPU * activeApu.quantity };
+    const { precioUnitarioNeto } = calculateApuTotals(activeApu, project);
+    return { displayPU: precioUnitarioNeto, subtotal: precioUnitarioNeto * activeApu.quantity };
   };
 
   return (

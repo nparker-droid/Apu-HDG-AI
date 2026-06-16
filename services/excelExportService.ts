@@ -1,5 +1,6 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { saveBlobWithPicker } from './fileSaveService';
+import { calculateApuTotals } from '../lib/apuCalculations';
 
 const XLSX = (window as any).XLSX;
 
@@ -32,7 +33,7 @@ const saveWorkbook = async (wb: any, fileName: string) => {
 };
 
 export const exportProjectToExcel = async (project: Project, chapters: Chapter[], apus: APU[]) => {
-    if (!XLSX) return alert("Librería Excel no cargada.");
+    if (!XLSX) { console.error("XLSX no cargado"); return; }
 
     const wb = XLSX.utils.book_new();
 
@@ -107,7 +108,7 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
 };
 
 export const exportSingleApuToExcel = async (project: Project, apu: APU) => {
-    if (!XLSX) return alert("Librería Excel no cargada.");
+    if (!XLSX) { console.error("XLSX no cargado"); return; }
     const wb = XLSX.utils.book_new();
     const wsApu = createApuWorksheet(apu, project, apu.code);
     const sheetName = safeSheetName(`APU ${apu.code}`, 'APU');
@@ -151,8 +152,8 @@ const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
 
     apuRows.push(
         ["", "COSTO DIRECTO UNITARIO", "", "", "", numCell(stats.costoDirecto)],
-        ["", `GASTOS GENERALES (${stats.overhead}%)`, "", "", "", numCell(stats.costoDirecto * stats.overhead / 100)],
-        ["", `UTILIDAD (${stats.utility}%)`, "", "", "", numCell(stats.costoDirecto * stats.utility / 100)],
+        ["", `GASTOS GENERALES (${stats.overhead}%)`, "", "", "", numCell(stats.costoDirecto * (stats.overhead / 100))],
+        ["", `UTILIDAD (${stats.utility}%)`, "", "", "", numCell(stats.costoDirecto * (stats.utility / 100))],
         ["", unitPriceRowLabel, "", "", "", numCell(stats.precioUnitarioNeto)]
     );
 
@@ -168,23 +169,4 @@ const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
     return wsApu;
 };
 
-const calculateApuTotals = (apu: APU, project: Project) => {
-    const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
-    const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
-    const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
-
-    const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
-    const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
-    const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
-    const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
-
-    const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
-    const factorIndirectos = 1 + (overhead + utility) / 100;
-    const costoNetoTotal = costoDirectoTotal * factorIndirectos;
-
-    const precioUnitarioNeto = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
-        ? costoNetoTotal / (apu.divisorQuantity || 1)
-        : costoNetoTotal;
-
-    return { costoDirecto: costoDirectoTotal, precioUnitarioNeto, overhead, utility };
-};
+// calculateApuTotals importado desde lib/apuCalculations — fuente única de verdad para todos los módulos

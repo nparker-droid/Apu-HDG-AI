@@ -4,6 +4,8 @@ import { APU, Project, Chapter, ItemCategory, APUItem, HistoryItem } from '../ty
 import { getApuSuggestions } from '../services/geminiService';
 import SectionTable from './SectionTable';
 import { exportSingleApuToExcel } from '../services/excelExportService';
+import { calculateApuTotals } from '../lib/apuCalculations';
+import { toast } from 'sonner';
 
 const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
 const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/50' : '';
@@ -22,9 +24,10 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
   const [activeTab, setActiveTab] = useState<ItemCategory>(ItemCategory.MATERIAL);
   const [showConfig, setShowConfig] = useState(false);
 
-  const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
-  const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
-  const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
+  const { subMat, subMoTotal, subEq, subOt, costoDirecto, costoNetoUnitario, precioUnitarioNeto, laws, overhead, utility } = calculateApuTotals(apu, project);
+  const costoDirectoUnitario = costoDirecto;
+  const displayUnitPrice = precioUnitarioNeto;
+  const totalPartidaConIva = displayUnitPrice * apu.quantity * 1.19;
 
   const handleChange = (field: string, value: any) => {
     let finalValue = value;
@@ -36,26 +39,10 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
 
   const handleItemsChange = (category: ItemCategory, items: APUItem[]) => onUpdate({ ...apu, items: { ...apu.items, [category]: items } });
 
-  const calculateSubtotal = (category: ItemCategory) => apu.items[category].reduce((sum, item) => sum + (item.total || 0), 0);
-
-  const subMat = calculateSubtotal(ItemCategory.MATERIAL);
-  const rawSubMo = calculateSubtotal(ItemCategory.MANO_DE_OBRA);
-  const lawsAmt = rawSubMo * (laws / 100);
-  const subMoTotal = rawSubMo + lawsAmt;
-  const subEq = calculateSubtotal(ItemCategory.EQUIPO);
-  const subOt = calculateSubtotal(ItemCategory.OTROS);
-
-  const costoDirectoUnitario = subMat + subMoTotal + subEq + subOt;
-  const costoNetoUnitario = costoDirectoUnitario * (1 + (overhead + utility) / 100);
-
-  const displayUnitPrice = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
-    ? costoNetoUnitario / (apu.divisorQuantity || 1)
-    : costoNetoUnitario;
-
-  const totalPartidaConIva = (displayUnitPrice * apu.quantity) * 1.19;
+  const calculateSubtotal = (category: ItemCategory) => (apu.items[category] ?? []).reduce((sum, item) => sum + (item.total || 0), 0);
 
   const handleAiSuggest = async () => {
-    if (!apu.name) return alert('Ingresa nombre de partida.');
+    if (!apu.name) { toast.error('Ingresa el nombre de la partida primero.'); return; }
     setIsAiLoading(true);
     try {
       const s = await getApuSuggestions(apu.name);
@@ -63,18 +50,13 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
         const quantity = usePerformance ? 1 : (Number(i.quantity) || 1);
         const performance = usePerformance ? (Number(i.performance) || 1) : 1;
         const unitPrice = Number(i.unitPrice) || 0;
-        return {
-          id: crypto.randomUUID(),
-          description: i.description,
-          unit: i.unit,
-          quantity,
-          performance,
-          unitPrice,
-          total: unitPrice * (usePerformance ? performance : quantity)
-        };
+        return { id: crypto.randomUUID(), description: i.description, unit: i.unit, quantity, performance, unitPrice, total: unitPrice * (usePerformance ? performance : quantity) };
       });
-      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials), [ItemCategory.MANO_DE_OBRA]: map(s.labor, true), [ItemCategory.EQUIPO]: map(s.equipment, true), [ItemCategory.OTROS]: [] } });
-    } catch (e) { alert('Error IA'); } finally { setIsAiLoading(false); }
+      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials || []), [ItemCategory.MANO_DE_OBRA]: map(s.labor || [], true), [ItemCategory.EQUIPO]: map(s.equipment || [], true), [ItemCategory.OTROS]: [] } });
+      toast.success('APU generado por IA correctamente');
+    } catch (e: any) {
+      toast.error(`Error de IA: ${e?.message || 'No se pudo contactar a Gemini'}`);
+    } finally { setIsAiLoading(false); }
   };
 
   return (

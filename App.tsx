@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
@@ -11,6 +11,10 @@ import { exportProjectToExcel } from './services/excelExportService';
 import { saveBlobWithPicker } from './services/fileSaveService';
 import { Project, APU, Chapter, ItemCategory } from './types';
 import { Toaster, toast } from 'sonner';
+import {
+  initDriveAuth, requestDriveAccess, saveAllToDrive, loadFromDrive,
+  isDriveConnected, disconnectDrive, getLastSyncTime, GOOGLE_CLIENT_ID
+} from './services/driveService';
 
 const safeUUID = () => crypto.randomUUID();
 
@@ -21,7 +25,8 @@ const App: React.FC = () => {
     apus, setApus, updateApu, deleteApu, moveApu,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
-    deleteProject, duplicateProject, lastSaved
+    deleteProject, duplicateProject, lastSaved,
+    reloadFromStorage
   } = useAppStore();
 
   const [currentApuId, setCurrentApuId] = useState<string | null>(null);
@@ -32,6 +37,8 @@ const App: React.FC = () => {
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [isUserLibraryOpen, setIsUserLibraryOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [driveStatus, setDriveStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [driveConnected, setDriveConnected] = useState(false);
 
   const activeProject = useMemo(() =>
     projects.find(p => p.id === activeProjectId) || null,
@@ -104,9 +111,67 @@ const App: React.FC = () => {
     setSaveStatus('saving');
     if (saveActiveProject()) {
       setSaveStatus('saved');
-      toast.success("Sincronización manual completa");
+      toast.success("Guardado localmente");
       setTimeout(() => setSaveStatus('idle'), 2000);
     }
+  };
+
+  const handleDriveConnect = async () => {
+    if (!GOOGLE_CLIENT_ID) {
+      toast.error('Google Client ID no configurado. Agrega VITE_GOOGLE_CLIENT_ID en .env.local');
+      return;
+    }
+    try {
+      setDriveStatus('syncing');
+      await initDriveAuth();
+      await requestDriveAccess();
+      setDriveConnected(true);
+      setDriveStatus('synced');
+      toast.success('Google Drive conectado correctamente');
+      setTimeout(() => setDriveStatus('idle'), 2000);
+    } catch (e: any) {
+      setDriveStatus('error');
+      toast.error(`Error conectando Drive: ${e?.message || 'Error desconocido'}`);
+      setTimeout(() => setDriveStatus('idle'), 3000);
+    }
+  };
+
+  const handleDriveSave = async () => {
+    if (!isDriveConnected()) { await handleDriveConnect(); if (!isDriveConnected()) return; }
+    try {
+      setDriveStatus('syncing');
+      await saveAllToDrive(projects);
+      setDriveStatus('synced');
+      toast.success('Proyecto guardado en Google Drive');
+      setTimeout(() => setDriveStatus('idle'), 2000);
+    } catch (e: any) {
+      setDriveStatus('error');
+      toast.error(`Error guardando en Drive: ${e?.message || 'Error de red'}`);
+      setTimeout(() => setDriveStatus('idle'), 3000);
+    }
+  };
+
+  const handleDriveLoad = async () => {
+    if (!isDriveConnected()) { await handleDriveConnect(); if (!isDriveConnected()) return; }
+    try {
+      setDriveStatus('syncing');
+      const backup = await loadFromDrive();
+      if (!backup) { toast.info('No se encontró copia de seguridad en Drive.'); setDriveStatus('idle'); return; }
+      reloadFromStorage();
+      setDriveStatus('synced');
+      toast.success(`Restaurado desde Drive (${new Date(backup.savedAt).toLocaleString('es-CL')})`);
+      setTimeout(() => setDriveStatus('idle'), 2000);
+    } catch (e: any) {
+      setDriveStatus('error');
+      toast.error(`Error cargando desde Drive: ${e?.message || 'Error de red'}`);
+      setTimeout(() => setDriveStatus('idle'), 3000);
+    }
+  };
+
+  const handleDriveDisconnect = () => {
+    disconnectDrive();
+    setDriveConnected(false);
+    toast.info('Google Drive desconectado');
   };
 
   const handleCreateApu = (pid: string, cid: string) => {
@@ -241,16 +306,55 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2">
                 {lastSaved && (
                   <span className="hidden md:flex items-center gap-1 text-[8px] text-slate-500 font-black uppercase bg-slate-100 px-3 py-2 rounded-xl whitespace-nowrap">
-                    <Clock className="w-3 h-3 text-[#88C13E]" /> Último respaldo {new Date(lastSaved).toLocaleTimeString()}
+                    <Clock className="w-3 h-3 text-[#88C13E]" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
                   </span>
                 )}
+
+                {/* Google Drive sync */}
+                <div className="flex items-center gap-1">
+                  {driveConnected ? (
+                    <>
+                      <button
+                        onClick={handleDriveSave}
+                        disabled={driveStatus === 'syncing'}
+                        title="Guardar en Google Drive"
+                        className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 uppercase tracking-widest transition-all disabled:opacity-60"
+                      >
+                        {driveStatus === 'syncing' ? <Loader2 className="w-3 h-3 animate-spin" /> : driveStatus === 'synced' ? <Check className="w-3 h-3" /> : <CloudUpload className="w-3 h-3" />}
+                        Drive
+                      </button>
+                      <button
+                        onClick={handleDriveLoad}
+                        disabled={driveStatus === 'syncing'}
+                        title="Restaurar desde Google Drive"
+                        className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 uppercase tracking-widest transition-all disabled:opacity-60"
+                      >
+                        <CloudDownload className="w-3 h-3" />
+                      </button>
+                      <button onClick={handleDriveDisconnect} title="Desconectar Drive" className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                        <CloudOff className="w-3 h-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleDriveConnect}
+                      disabled={driveStatus === 'syncing'}
+                      title="Conectar Google Drive para sincronización en la nube"
+                      className="flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 uppercase tracking-widest transition-all disabled:opacity-60"
+                    >
+                      {driveStatus === 'syncing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudUpload className="w-3 h-3" />}
+                      Drive
+                    </button>
+                  )}
+                </div>
+
                 <button
                   onClick={handleManualSave}
                   disabled={saveStatus === 'saving'}
                   className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 uppercase tracking-widest transition-all"
                 >
                   {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar Manual'}
+                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
                 </button>
                 <button
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
