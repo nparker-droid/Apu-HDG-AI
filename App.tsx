@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
@@ -7,6 +7,7 @@ import ProjectModal from './components/ProjectModal';
 import ChapterModal from './components/ChapterModal';
 import LibraryModal from './components/LibraryModal';
 import ProjectGeneralView from './components/ProjectGeneralView';
+import HelpModal from './components/HelpModal';
 import { exportProjectToExcel } from './services/excelExportService';
 import { saveBlobWithPicker } from './services/fileSaveService';
 import { Project, APU, Chapter, ItemCategory } from './types';
@@ -40,6 +41,7 @@ const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [driveConnected, setDriveConnected] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const activeProject = useMemo(() =>
     projects.find(p => p.id === activeProjectId) || null,
@@ -429,6 +431,13 @@ const App: React.FC = () => {
                 >
                   <Download className="w-3 h-3" /> Reporte Excel
                 </button>
+                <button
+                  onClick={() => setIsHelpOpen(true)}
+                  title="Manual de operación"
+                  className="p-2 rounded-xl text-slate-400 hover:text-[#004071] hover:bg-slate-100 transition-all"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </button>
               </div>
             </header>
 
@@ -540,6 +549,8 @@ const App: React.FC = () => {
           onSelect={() => undefined}
         />
       )}
+
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </div>
   );
 };
