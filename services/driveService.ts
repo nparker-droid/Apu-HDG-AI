@@ -2,7 +2,6 @@ import { Project, Chapter, APU, HistoryItem } from '../types';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
-// drive.file: solo accede a archivos que la app crea — carpeta visible en "Mi unidad"
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'APU Hidrogestion';
 const FILE_NAME = 'apu-engine-backup.json';
@@ -12,6 +11,10 @@ const HISTORY_KEY = 'apu_history';
 const RESOURCES_KEY = 'apu_user_resource_library';
 const SYNC_TIMESTAMP_KEY = 'apu_drive_last_sync';
 const FOLDER_ID_CACHE_KEY = 'apu_drive_folder_id';
+// Persistencia del token entre recargas de página
+const TOKEN_KEY = 'apu_drive_token';
+const TOKEN_EXPIRY_KEY = 'apu_drive_token_expiry';
+const WANTS_CONNECTED_KEY = 'apu_drive_wants_connected';
 
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -28,6 +31,40 @@ let tokenClient: any = null;
 let accessToken: string | null = null;
 let tokenExpiry = 0;
 
+// Carga el token guardado en localStorage al iniciar
+const loadSavedToken = (): void => {
+  try {
+    const saved = localStorage.getItem(TOKEN_KEY);
+    const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+    if (saved && expiry && Date.now() < expiry) {
+      accessToken = saved;
+      tokenExpiry = expiry;
+    }
+  } catch { /**/ }
+};
+
+// Guarda el token en localStorage para sobrevivir recargas
+const persistToken = (token: string, expiresIn: number): void => {
+  const expiry = Date.now() + expiresIn * 1000 - 60_000;
+  accessToken = token;
+  tokenExpiry = expiry;
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString());
+    localStorage.setItem(WANTS_CONNECTED_KEY, 'true');
+  } catch { /**/ }
+};
+
+const clearToken = (): void => {
+  accessToken = null;
+  tokenExpiry = 0;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_EXPIRY_KEY);
+    localStorage.removeItem(FOLDER_ID_CACHE_KEY);
+  } catch { /**/ }
+};
+
 const isTokenValid = () => !!(accessToken && Date.now() < tokenExpiry);
 
 const parseDriveError = async (response: Response): Promise<string> => {
@@ -36,23 +73,16 @@ const parseDriveError = async (response: Response): Promise<string> => {
     const err = data?.error;
     if (!err) return `Error ${response.status}`;
 
-    // 403 Drive API no habilitada
     if (response.status === 403 && err.errors?.[0]?.reason === 'SERVICE_DISABLED') {
       return 'Google Drive API no está habilitada en tu proyecto de Google Cloud. Ve a: console.cloud.google.com → APIs y servicios → Busca "Google Drive API" → Habilitar. Luego espera 1-2 minutos y reintenta.';
     }
-
-    // 403 acceso denegado genérico
     if (response.status === 403) {
       return 'Permiso denegado. Asegúrate de que el Client ID tenga el scope de Drive habilitado y que el dominio esté autorizado.';
     }
-
-    // 401 token inválido
     if (response.status === 401) {
-      accessToken = null;
-      tokenExpiry = 0;
+      clearToken();
       return 'Sesión expirada. Intenta conectar de nuevo.';
     }
-
     return err.message || `Error ${response.status}`;
   } catch {
     return `Error ${response.status}: ${response.statusText}`;
@@ -96,12 +126,32 @@ export const requestDriveAccess = (): Promise<void> =>
         }
         return;
       }
-      accessToken = response.access_token;
-      tokenExpiry = Date.now() + response.expires_in * 1000 - 60_000;
+      persistToken(response.access_token, response.expires_in);
       resolve();
     };
     tokenClient.requestAccessToken({ prompt: '' });
   });
+
+// Intenta reconectar silenciosamente al cargar la página si el usuario ya había conectado antes.
+// Si el token guardado aún es válido → lo usa directamente.
+// Si expiró → pide uno nuevo sin popup (Google no pide confirmación si ya se dio consentimiento).
+export const autoReconnectDrive = async (): Promise<boolean> => {
+  if (!GOOGLE_CLIENT_ID) return false;
+  const wantsConnected = localStorage.getItem(WANTS_CONNECTED_KEY) === 'true';
+  if (!wantsConnected) return false;
+
+  loadSavedToken();
+  if (isTokenValid()) return true;
+
+  // Token expirado — intento silencioso (prompt: '' no muestra ventana emergente)
+  try {
+    await initDriveAuth();
+    await requestDriveAccess();
+    return isTokenValid();
+  } catch {
+    return false;
+  }
+};
 
 export const isDriveConnected = () => isTokenValid();
 
@@ -109,9 +159,8 @@ export const disconnectDrive = () => {
   if (accessToken) {
     (window as any).google?.accounts?.oauth2?.revoke?.(accessToken);
   }
-  accessToken = null;
-  tokenExpiry = 0;
-  localStorage.removeItem(FOLDER_ID_CACHE_KEY);
+  clearToken();
+  try { localStorage.removeItem(WANTS_CONNECTED_KEY); } catch { /**/ }
 };
 
 const driveRequest = async (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -127,13 +176,10 @@ const driveRequest = async (url: string, options: RequestInit = {}): Promise<Res
   return response;
 };
 
-// Busca o crea la carpeta "APU Hidrogestion" visible en Mi unidad
 const getOrCreateFolder = async (): Promise<string> => {
-  // Revisar caché local primero
   const cached = localStorage.getItem(FOLDER_ID_CACHE_KEY);
   if (cached) return cached;
 
-  // Buscar carpeta existente
   const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const res = await driveRequest(`${DRIVE_API}/files?q=${q}&fields=files(id,name)&spaces=drive`);
   const data = await res.json();
@@ -144,14 +190,10 @@ const getOrCreateFolder = async (): Promise<string> => {
     return id;
   }
 
-  // Crear carpeta nueva
   const createRes = await driveRequest(`${DRIVE_API}/files`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: FOLDER_NAME,
-      mimeType: 'application/vnd.google-apps.folder'
-    })
+    body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
   });
   const folder = await createRes.json();
   localStorage.setItem(FOLDER_ID_CACHE_KEY, folder.id);
@@ -171,7 +213,7 @@ export const saveAllToDrive = async (projects: Project[]): Promise<void> => {
     try {
       const raw = localStorage.getItem(`${PROJECT_PREFIX}${p.id}`);
       if (raw) projectData[p.id] = JSON.parse(raw);
-    } catch { /* skip corrupted */ }
+    } catch { /**/ }
   }
 
   let history: HistoryItem[] = [];
@@ -193,14 +235,12 @@ export const saveAllToDrive = async (projects: Project[]): Promise<void> => {
   const content = JSON.stringify(backup, null, 2);
 
   if (existingId) {
-    // Actualizar archivo existente (solo contenido, sin cambiar carpeta)
     await driveRequest(`${DRIVE_UPLOAD}/files/${existingId}?uploadType=media`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: content
     });
   } else {
-    // Crear archivo nuevo en la carpeta
     const metadataPart = new Blob(
       [JSON.stringify({ name: FILE_NAME, parents: [folderId] })],
       { type: 'application/json' }
@@ -209,7 +249,6 @@ export const saveAllToDrive = async (projects: Project[]): Promise<void> => {
     const form = new FormData();
     form.append('metadata', metadataPart);
     form.append('file', filePart);
-
     await driveRequest(`${DRIVE_UPLOAD}/files?uploadType=multipart`, {
       method: 'POST',
       body: form

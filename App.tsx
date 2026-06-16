@@ -13,7 +13,8 @@ import { Project, APU, Chapter, ItemCategory } from './types';
 import { Toaster, toast } from 'sonner';
 import {
   initDriveAuth, requestDriveAccess, saveAllToDrive, loadFromDrive,
-  isDriveConnected, disconnectDrive, getLastSyncTime, GOOGLE_CLIENT_ID
+  isDriveConnected, disconnectDrive, getLastSyncTime, GOOGLE_CLIENT_ID,
+  autoReconnectDrive
 } from './services/driveService';
 
 const safeUUID = () => crypto.randomUUID();
@@ -79,6 +80,13 @@ const App: React.FC = () => {
     if (JSON.stringify(newChapters) !== JSON.stringify(chapters)) setChapters(newChapters);
     if (JSON.stringify(newApus) !== JSON.stringify(apus)) setApus(newApus);
   }, [chapters, apus, activeProjectId]);
+
+  // Reconexión silenciosa a Drive al cargar la página
+  useEffect(() => {
+    autoReconnectDrive().then(connected => {
+      setDriveConnected(connected);
+    });
+  }, []);
 
   const saveRef = useRef(saveActiveProject);
   useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
@@ -333,16 +341,16 @@ const App: React.FC = () => {
 
                   {/* Hover card con acciones y ubicación */}
                   <div className="absolute right-0 top-full mt-2 w-60 bg-slate-900 text-white rounded-2xl shadow-2xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
-                    <div className="flex items-start gap-2 pb-2 border-b border-slate-700 mb-2">
-                      <FolderOpen className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Ubicación del respaldo</p>
-                        <p className="text-[9px] text-slate-200 font-bold mt-0.5">Mi unidad / APU Hidrogestion</p>
-                        <p className="text-[8px] text-slate-500">apu-engine-backup.json</p>
-                      </div>
-                    </div>
                     {driveConnected ? (
                       <>
+                        <div className="flex items-start gap-2 pb-2 border-b border-slate-700 mb-2">
+                          <FolderOpen className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Ubicación del respaldo</p>
+                            <p className="text-[9px] text-slate-200 font-bold mt-0.5">Mi unidad / APU Hidrogestion</p>
+                            <p className="text-[8px] text-slate-500">apu-engine-backup.json</p>
+                          </div>
+                        </div>
                         {getLastSyncTime() && (
                           <p className="text-[8px] text-slate-500 mb-2">
                             Último backup: {new Date(getLastSyncTime()!).toLocaleString('es-CL')}
@@ -373,7 +381,8 @@ const App: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <p className="text-[8px] text-slate-400 mb-2">Conecta tu cuenta de Google para guardar un respaldo automático en Drive.</p>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1">Google Drive</p>
+                        <p className="text-[8px] text-slate-400 mb-2">Conecta tu cuenta de Google para guardar un respaldo automático en la nube.</p>
                         <button
                           onClick={handleDriveConnect}
                           disabled={driveStatus === 'syncing'}
