@@ -91,6 +91,25 @@ const App: React.FC = () => {
   const saveRef = useRef(saveActiveProject);
   useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
 
+  // Refs para acceder a los valores actuales desde el intervalo sin reiniciarlo
+  const driveConnectedRef = useRef(driveConnected);
+  useEffect(() => { driveConnectedRef.current = driveConnected; }, [driveConnected]);
+  const projectsRef = useRef(projects);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
+
+  // Auto-save a Drive cada 5 minutos si el usuario está conectado
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      if (!driveConnectedRef.current) return;
+      try {
+        await saveAllToDrive(projectsRef.current);
+        setDriveStatus('synced');
+        setTimeout(() => setDriveStatus('idle'), 2000);
+      } catch { /* fallo silencioso en auto-save — el usuario puede guardar manualmente */ }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     if (!activeProjectId) return;
     const timer = setInterval(() => {
