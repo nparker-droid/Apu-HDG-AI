@@ -147,11 +147,23 @@ const SectionTable: React.FC<SectionTableProps> = ({
 
   const formatPriceSources = (sources: string[] | undefined): string => {
     if (!sources || sources.length === 0) return '';
-    const domains = sources.slice(0, 4).map(s => {
-      try { return new URL(s).hostname.replace(/^www\./, ''); }
-      catch { return s.length > 40 ? s.substring(0, 40) + '…' : s; }
-    });
-    return `Fuentes: ${domains.join(', ')}`;
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const s of sources) {
+      if (labels.length >= 4) break;
+      try {
+        const host = new URL(s).hostname.replace(/^www\./, '');
+        // URLs de redirección interna de Gemini Search Grounding → mostrar como "Google Search"
+        const label = host.includes('vertexaisearch') || host.includes('googleapis') || host.includes('google.com')
+          ? 'Google Search'
+          : host;
+        if (!seen.has(label)) { seen.add(label); labels.push(label); }
+      } catch {
+        const fallback = s.length > 30 ? s.substring(0, 30) + '…' : s;
+        if (!seen.has(fallback)) { seen.add(fallback); labels.push(fallback); }
+      }
+    }
+    return labels.length ? `Fuentes: ${labels.join(', ')}` : '';
   };
 
   const handleGeneratePrice = async (item: APUItem, index: number) => {
