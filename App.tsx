@@ -459,6 +459,8 @@ const App: React.FC = () => {
                   project={activeProject}
                   chapters={chapters}
                   apus={apus}
+                  moveChapter={moveChapter}
+                  moveApu={moveApu}
                 />
               )}
             </div>

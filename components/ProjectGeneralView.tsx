@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { FileText, TrendingUp, DollarSign, PieChart, ChevronUp, ChevronDown } from 'lucide-react';
-import { useAppStore } from '../store/useAppStore';
 import { Project, Chapter, APU } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
 import { calculateApuTotals } from '../lib/apuCalculations';
@@ -9,10 +8,11 @@ interface ProjectGeneralViewProps {
   project: Project;
   chapters: Chapter[];
   apus: APU[];
+  moveChapter: (id: string, dir: 'up' | 'down') => void;
+  moveApu: (id: string, dir: 'up' | 'down') => void;
 }
 
-const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapters, apus }) => {
-  const { moveChapter, moveApu } = useAppStore();
+const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapters, apus, moveChapter, moveApu }) => {
 
   const budgetData = useMemo(() => {
     let totalNetoProyecto = 0;
