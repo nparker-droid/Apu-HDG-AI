@@ -113,8 +113,8 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                       <div className="flex items-center gap-2">
                         <span>{cIdx + 1}</span>
                         <div className="flex flex-col">
-                          <button onClick={() => moveChapter(chapter.id, 'up')} className="hover:text-blue-600 outline-none"><ChevronUp className="w-2.5 h-2.5" /></button>
-                          <button onClick={() => moveChapter(chapter.id, 'down')} className="hover:text-blue-600 outline-none"><ChevronDown className="w-2.5 h-2.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'up'); }} className="p-1 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'down'); }} className="p-1 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"><ChevronDown className="w-3 h-3" /></button>
                         </div>
                       </div>
                     </td>
@@ -131,8 +131,8 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                           <div className="flex items-center gap-2 font-mono">
                             <span>{cIdx + 1}.{aIdx + 1}</span>
                             <div className="flex flex-col">
-                              <button onClick={() => moveApu(apu.id, 'up')} className="hover:text-blue-600 outline-none"><ChevronUp className="w-2.5 h-2.5" /></button>
-                              <button onClick={() => moveApu(apu.id, 'down')} className="hover:text-blue-600 outline-none"><ChevronDown className="w-2.5 h-2.5" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="p-1 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="p-1 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"><ChevronDown className="w-3 h-3" /></button>
                             </div>
                           </div>
                         </td>

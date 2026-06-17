@@ -196,6 +196,30 @@ export const useAppStore = () => {
     });
   }, []);
 
+  const moveApuToChapter = useCallback((apuId: string, toChapterId: string, beforeApuId: string | null) => {
+    setApus(prev => {
+      const apu = prev.find(a => a.id === apuId);
+      if (!apu || (apu.chapterId === toChapterId && beforeApuId === apuId)) return prev;
+      const withoutApu = prev.filter(a => a.id !== apuId);
+      const updatedApu = { ...apu, chapterId: toChapterId };
+      if (beforeApuId !== null) {
+        const insertIdx = withoutApu.findIndex(a => a.id === beforeApuId);
+        if (insertIdx !== -1) {
+          const result = [...withoutApu];
+          result.splice(insertIdx, 0, updatedApu);
+          return result;
+        }
+      }
+      let insertPos = withoutApu.length;
+      for (let i = withoutApu.length - 1; i >= 0; i--) {
+        if (withoutApu[i].chapterId === toChapterId) { insertPos = i + 1; break; }
+      }
+      const result = [...withoutApu];
+      result.splice(insertPos, 0, updatedApu);
+      return result;
+    });
+  }, []);
+
   // Método para restaurar estado React después de una carga desde Drive
   const reloadFromStorage = useCallback(() => {
     const storedProjects = safeGetItem<Project[]>(LIB_KEY, []);
@@ -209,7 +233,7 @@ export const useAppStore = () => {
   return {
     projects, setProjects,
     chapters, setChapters, addChapter, moveChapter, deleteChapter,
-    apus, setApus, addApu, updateApu, deleteApu, moveApu,
+    apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved,

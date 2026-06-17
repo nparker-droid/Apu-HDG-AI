@@ -45,6 +45,7 @@ interface SidebarProps {
     onDeleteProject: (id: string) => void;
     onDuplicateProject: (id: string) => void;
     moveApu: (id: string, dir: 'up' | 'down') => void;
+    moveApuToChapter: (apuId: string, toChapterId: string, beforeApuId: string | null) => void;
     onRenameChapter: (id: string, name: string) => void;
 }
 
@@ -57,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onShareProject, handleImport,
     onDeleteProject, onDuplicateProject,
-    moveApu, onRenameChapter
+    moveApu, moveApuToChapter, onRenameChapter
 }) => {
     const activeProject = projects.find(p => p.id === currentProjectId);
 
@@ -69,6 +70,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [chapterActionMenu, setChapterActionMenu] = useState<{ projectId: string; chapterId: string } | null>(null);
     const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
     const [editingChapterName, setEditingChapterName] = useState('');
+    const [draggedApuId, setDraggedApuId] = useState<string | null>(null);
+    const [dragOver, setDragOver] = useState<{ chapterId: string; apuId: string | null } | null>(null);
 
     const handleConfirmAction = () => {
         if (!confirmDelete) return;
@@ -248,35 +251,52 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 </button>
                                             </div>
                                         )}
-                                        <div className="space-y-1">
+                                        <div
+                                            className="space-y-0.5"
+                                            onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
+                                            onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
+                                        >
                                             {apus.filter(a => a.chapterId === chapter.id).map(apu => (
-                                                <div
-                                                    key={apu.id}
-                                                    onClick={() => setCurrentApuId(apu.id)}
-                                                    className={cn(
-                                                        "group/apu relative p-3 rounded-xl cursor-pointer text-[9px] flex justify-between items-center transition-all",
-                                                        currentApuId === apu.id ? 'bg-[#88C13E] text-white shadow-md scale-[1.02]' : 'hover:bg-indigo-50 text-slate-500'
+                                                <div key={apu.id}>
+                                                    {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
+                                                        <div className="h-0.5 bg-[#004071] rounded-full mx-1 my-0.5" />
                                                     )}
-                                                >
-                                                    <span className="pr-2 font-bold whitespace-normal break-words leading-tight">{apu.code} {apu.name}</span>
-                                                    <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
-                                                        <div className="flex flex-col mr-1">
-                                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
-                                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                                    <div
+                                                        draggable
+                                                        onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
+                                                        onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
+                                                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
+                                                        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId && draggedApuId !== apu.id) { moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); } }}
+                                                        onClick={() => setCurrentApuId(apu.id)}
+                                                        className={cn(
+                                                            "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
+                                                            draggedApuId === apu.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
+                                                            currentApuId === apu.id ? 'bg-[#88C13E] text-white shadow-md scale-[1.02]' : 'hover:bg-indigo-50 text-slate-500'
+                                                        )}
+                                                    >
+                                                        <span className="pr-2 font-bold whitespace-normal break-words leading-tight">{apu.code} {apu.name}</span>
+                                                        <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
+                                                            <div className="flex flex-col mr-1">
+                                                                <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                                            </div>
+                                                            <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-[#004071]"><Copy className="w-3 h-3" /></button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
+                                                                }}
+                                                                className="p-1 hover:text-red-600"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </button>
                                                         </div>
-                                                        <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-[#004071]"><Copy className="w-3 h-3" /></button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
-                                                            }}
-                                                            className="p-1 hover:text-red-600"
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
+                                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === null && draggedApuId !== null && (
+                                                <div className="h-0.5 bg-[#004071] rounded-full mx-1 my-0.5" />
+                                            )}
                                         </div>
                                     </div>
                                 ))}

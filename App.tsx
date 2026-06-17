@@ -24,7 +24,7 @@ const App: React.FC = () => {
   const {
     projects, setProjects,
     chapters, setChapters, addChapter, moveChapter, deleteChapter,
-    apus, setApus, updateApu, deleteApu, moveApu,
+    apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved,
@@ -315,13 +315,14 @@ const App: React.FC = () => {
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
+        moveApuToChapter={moveApuToChapter}
         onRenameChapter={(id, name) => setChapters(prev => prev.map(c => c.id === id ? { ...c, name } : c))}
       />
 
       <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-slate-50">
         {activeProject ? (
           <>
-            <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+            <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
                 {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"><Menu className="w-5 h-5" /></button>}
                 <div className="min-w-0">
