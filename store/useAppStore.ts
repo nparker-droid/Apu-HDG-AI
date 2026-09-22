@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Project, Chapter, APU, HistoryItem } from '../types';
+import { Project, Chapter, APU, HistoryItem, ProjectSheet } from '../types';
+import { normalizeApu } from '../lib/apuCalculations';
 
 const LIB_KEY = 'apu_engine_library';
 const PROJECT_PREFIX = 'apu_engine_project_';
@@ -13,12 +14,30 @@ const safeGetItem = <T>(key: string, fallback: T): T => {
   }
 };
 
-const safeSetItem = (key: string, value: unknown): void => {
+export const STORAGE_ERROR_EVENT = 'apu-storage-error';
+export const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024; // límite típico de localStorage por origen
+
+const safeSetItem = (key: string, value: unknown): boolean => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch (e) {
     console.error('[APU Store] localStorage lleno o no disponible:', e);
+    window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { key } }));
+    return false;
   }
+};
+
+/** Bytes aproximados usados por la app en localStorage (UTF-16 → 2 bytes/char). */
+export const getStorageUsage = (): number => {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || '';
+      total += (k.length + (localStorage.getItem(k) || '').length) * 2;
+    }
+  } catch { /**/ }
+  return total;
 };
 
 export const useAppStore = () => {
@@ -26,6 +45,7 @@ export const useAppStore = () => {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [apus, setApus] = useState<APU[]>([]);
+  const [sheet, setSheet] = useState<ProjectSheet>({ cells: {} });
   const [lastSaved, setLastSaved] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>(() => safeGetItem<HistoryItem[]>('apu_history', []));
 
@@ -37,8 +57,8 @@ export const useAppStore = () => {
     if (!activeProjectId) return;
     const activeProjectMeta = projects.find(p => p.id === activeProjectId);
     if (!activeProjectMeta) return;
-    safeSetItem(`${PROJECT_PREFIX}${activeProjectId}`, { chapters, apus, metadata: activeProjectMeta });
-  }, [chapters, apus, activeProjectId, projects]);
+    safeSetItem(`${PROJECT_PREFIX}${activeProjectId}`, { chapters, apus, sheet, metadata: activeProjectMeta });
+  }, [chapters, apus, sheet, activeProjectId, projects]);
 
   // Detección de cambios en otra pestaña: recarga el proyecto activo si fue modificado
   useEffect(() => {
@@ -49,6 +69,7 @@ export const useAppStore = () => {
           const parsed = JSON.parse(e.newValue);
           setChapters(parsed.chapters || []);
           setApus(parsed.apus || []);
+          setSheet(parsed.sheet || { cells: {} });
         } catch { /* ignore corrupted data from other tab */ }
       }
       if (e.key === LIB_KEY && e.newValue) {
@@ -60,16 +81,19 @@ export const useAppStore = () => {
   }, [activeProjectId]);
 
   const loadProject = useCallback((id: string) => {
-    const data = safeGetItem<{ chapters?: Chapter[]; apus?: APU[]; metadata?: Project } | null>(
+    const data = safeGetItem<{ chapters?: Chapter[]; apus?: APU[]; metadata?: Project; sheet?: ProjectSheet } | null>(
       `${PROJECT_PREFIX}${id}`, null
     );
     if (data) {
+      const meta = data.metadata || safeGetItem<Project[]>(LIB_KEY, []).find(p => p.id === id) || null;
       setChapters(data.chapters || []);
-      setApus(data.apus || []);
+      setApus((data.apus || []).map(a => normalizeApu(a, meta)));
+      setSheet(data.sheet || { cells: {} });
       setLastSaved(data.metadata?.updatedAt || Date.now());
     } else {
       setChapters([]);
       setApus([]);
+      setSheet({ cells: {} });
       setLastSaved(null);
     }
     setActiveProjectId(id);
@@ -78,10 +102,13 @@ export const useAppStore = () => {
   const saveActiveProject = useCallback(() => {
     if (!activeProjectId) return null;
     const timestamp = Date.now();
+    const meta = projects.find(p => p.id === activeProjectId);
+    const ok = meta ? safeSetItem(`${PROJECT_PREFIX}${activeProjectId}`, { chapters, apus, sheet, metadata: { ...meta, updatedAt: timestamp } }) : false;
+    if (!ok) return null;
     setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, updatedAt: timestamp } : p));
     setLastSaved(timestamp);
     return timestamp;
-  }, [activeProjectId]);
+  }, [activeProjectId, projects, chapters, apus, sheet]);
 
   const deleteProject = useCallback((id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id));
@@ -90,6 +117,7 @@ export const useAppStore = () => {
       setActiveProjectId(null);
       setChapters([]);
       setApus([]);
+      setSheet({ cells: {} });
     }
   }, [activeProjectId]);
 
@@ -97,7 +125,7 @@ export const useAppStore = () => {
     const sourceProject = projects.find(p => p.id === id);
     if (!sourceProject) return;
 
-    const sourceData = safeGetItem<{ chapters?: Chapter[]; apus?: APU[] } | null>(
+    const sourceData = safeGetItem<{ chapters?: Chapter[]; apus?: APU[]; sheet?: ProjectSheet } | null>(
       `${PROJECT_PREFIX}${id}`, null
     );
     if (!sourceData) return;
@@ -170,9 +198,12 @@ export const useAppStore = () => {
   const addHistoryItem = useCallback((item: HistoryItem) => {
     if (!item.description || item.description.trim() === '') return;
     setHistory(prev => {
-      const exists = prev.find(h => h.description.toLowerCase() === item.description.toLowerCase());
-      if (exists) return prev;
-      return [item, ...prev].slice(0, 500);
+      // Mantiene el valor más reciente por descripción+categoría (antes quedaba congelado el primero)
+      const key = item.description.toLowerCase().trim();
+      const idx = prev.findIndex(h => h.category === item.category && h.description.toLowerCase().trim() === key);
+      if (idx === 0 && prev[0].unitPrice === item.unitPrice && prev[0].unit === item.unit && prev[0].performance === item.performance) return prev;
+      const rest = idx === -1 ? prev : prev.filter((_, i) => i !== idx);
+      return [item, ...rest].slice(0, 500);
     });
   }, []);
 
@@ -227,10 +258,12 @@ export const useAppStore = () => {
     setActiveProjectId(null);
     setChapters([]);
     setApus([]);
+    setSheet({ cells: {} });
     setLastSaved(null);
   }, []);
 
   return {
+    sheet, setSheet,
     projects, setProjects,
     chapters, setChapters, addChapter, moveChapter, deleteChapter,
     apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,

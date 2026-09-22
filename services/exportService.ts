@@ -1,15 +1,17 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { LOGO_BASE64 } from './logoData';
 import { saveBlobWithPicker } from './fileSaveService';
+import { calculateApuTotals, CATEGORIES } from '../lib/apuCalculations';
+import { formatCLP as fmtCLP, formatNumber } from '../lib/number';
 
 const getJsPDF = () => {
   const g = window as any;
   return g.jspdf ? g.jspdf.jsPDF : null;
 };
 
-export const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
-const formatNumAPU = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-const formatNumPresupuesto = (val: number) => val.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+export const formatCLP = fmtCLP;
+const formatNumAPU = (val: number) => formatNumber(Number(val) || 0, 3, 4);
+const formatNumPresupuesto = (val: number) => formatNumber(Number(val) || 0, 2, 3);
 
 export const formatUnit = (unit: string) => {
   if (!unit) return '';
@@ -19,6 +21,9 @@ export const formatUnit = (unit: string) => {
     .replace(/km2/gi, 'km²')
     .replace(/km3/gi, 'km³');
 };
+
+// jsPDF (helvetica estándar) no dibuja bien superíndices: en PDF se usa m2/m3 plano
+const pdfUnit = (unit: string) => (unit || '').replace(/²/g, '2').replace(/³/g, '3');
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '';
@@ -64,26 +69,8 @@ const addPageNumbers = (doc: any) => {
   }
 };
 
-const calculateTotals = (apu: APU, project: Project) => {
-  const laws = apu.useProjectGlobalRates ? project.globalSocialLaws : apu.socialLawsPercentage;
-  const overhead = apu.useProjectGlobalRates ? project.globalOverhead : apu.overheadPercentage;
-  const utility = apu.useProjectGlobalRates ? project.globalUtility : apu.utilityPercentage;
-
-  const sMat = apu.items[ItemCategory.MATERIAL].reduce((s, i) => s + i.total, 0);
-  const sMoB = apu.items[ItemCategory.MANO_DE_OBRA].reduce((s, i) => s + i.total, 0);
-  const sEq = apu.items[ItemCategory.EQUIPO].reduce((s, i) => s + i.total, 0);
-  const sOt = apu.items[ItemCategory.OTROS].reduce((s, i) => s + i.total, 0);
-
-  const costoDirectoTotal = sMat + (sMoB * (1 + laws / 100)) + sEq + sOt;
-  const factorIndirectos = 1 + (overhead + utility) / 100;
-  const costoNetoTotal = costoDirectoTotal * factorIndirectos;
-
-  const precioUnitarioNeto = (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0)
-    ? costoNetoTotal / (apu.divisorQuantity || 1)
-    : costoNetoTotal;
-
-  return { costoDirecto: costoDirectoTotal, precioUnitarioNeto, factorIndirectos, laws, overhead, utility };
-};
+// Fuente única de verdad: lib/apuCalculations
+const calculateTotals = (apu: APU, project: Project) => calculateApuTotals(apu, project);
 
 export const exportProjectToPDF = async (project: Project, chapters: Chapter[], apus: APU[]) => {
   const jsPDF = getJsPDF();
@@ -105,7 +92,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
     chapterApus.forEach((apu, aIdx) => {
       const apuNumber = `${chapterNumber}.${aIdx + 1}`;
       const stats = calculateTotals(apu, project);
-      const totalRows = Object.values(apu.items).flat().length;
+      const totalRows = CATEGORIES.reduce((n, c) => n + (apu.items?.[c]?.length ?? 0) + 1, 0);
       const estimatedHeight = 50 + (totalRows * 7) + 25;
 
       if (currentY + estimatedHeight > 275) {
@@ -127,24 +114,31 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
 
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text(`UNIDAD: ${formatUnit(apu.unit)} | CANTIDAD: ${formatNumAPU(apu.quantity)}`, 14, currentY + 20);
+      doc.text(`UNIDAD: ${pdfUnit(apu.unit)} | CANTIDAD: ${formatNumAPU(apu.quantity)}`, 14, currentY + 20);
 
       currentY += 25;
 
-      Object.values(ItemCategory).forEach(cat => {
-        const items = apu.items[cat];
+      CATEGORIES.forEach(cat => {
+        const items = apu.items?.[cat] ?? [];
         if (items.length === 0) return;
+        const isLabor = cat === ItemCategory.MANO_DE_OBRA;
+        const body: any[] = items.map(i => [
+          i.description,
+          pdfUnit(i.unit),
+          formatNumAPU(isLabor ? (i.performance || 0) : i.quantity),
+          formatCLP(i.unitPrice),
+          formatCLP(i.total)
+        ]);
+        if (isLabor && stats.lawsAmount > 0) {
+          body.push([{ content: `LEYES SOCIALES (${formatNumber(stats.laws, 0, 2)}% s/ ${formatCLP(stats.subMoRaw)})`, colSpan: 4, styles: { fontStyle: 'italic', halign: 'right' } }, formatCLP(stats.lawsAmount)]);
+        }
+        const catSubtotal = isLabor ? stats.subMoTotal : items.reduce((acc, i) => acc + (Number(i.total) || 0), 0);
+        body.push([{ content: `SUBTOTAL ${cat}`, colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', fillColor: [245, 247, 250] } }, { content: formatCLP(catSubtotal), styles: { fontStyle: 'bold', fillColor: [245, 247, 250] } }]);
 
         (doc as any).autoTable({
           startY: currentY,
-          head: [[cat.toUpperCase(), 'UNID.', cat === ItemCategory.MANO_DE_OBRA ? 'REND.' : 'CANT.', 'P. UNITARIO', 'TOTAL']],
-          body: items.map(i => [
-            i.description,
-            formatUnit(i.unit),
-            formatNumAPU(cat === ItemCategory.MANO_DE_OBRA ? (i.performance || 0) : i.quantity),
-            formatCLP(i.unitPrice),
-            formatCLP(i.total)
-          ]),
+          head: [[cat.toUpperCase(), 'UNID.', isLabor ? 'REND.' : 'CANT.', 'P. UNITARIO', 'TOTAL']],
+          body,
           theme: 'grid',
           styles: { fontSize: 7, cellPadding: 2 },
           headStyles: { fillColor: COLOR_HDG_BLUE, textColor: [255, 255, 255], halign: 'center' },
@@ -175,7 +169,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
       doc.text(formatCLP(stats.costoDirecto * (stats.utility / 100)), 196, currentY + 15, { align: 'right' });
 
       const unitPriceLabel = apu.divideUnitPrice
-        ? `P.U. NETO (por ${apu.divisorQuantity || 1} ${formatUnit(apu.unit)}):`
+        ? `P.U. NETO (por ${apu.divisorQuantity || 1} ${pdfUnit(apu.unit)}):`
         : `PRECIO UNITARIO NETO:`;
 
       doc.setFontSize(10);
@@ -211,6 +205,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
 
   let currentY = 45;
   let totalNetoProyecto = 0;
+  const chapterSummary: { n: number; name: string; total: number }[] = [];
 
   const projectChapters = chapters
     .filter(c => c.projectId === project.id)
@@ -222,12 +217,14 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
 
     if (chapApus.length === 0) return;
 
+    let chapterTotal = 0;
     const rows = chapApus.map((apu, aIdx) => {
       const apuNumber = `${chapterNumber}.${aIdx + 1}`;
       const stats = calculateTotals(apu, project);
       const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
       totalNetoProyecto += subtotalPartida;
-      return [apuNumber, apu.name, formatUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
+      chapterTotal += subtotalPartida;
+      return [apuNumber, apu.name, pdfUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)];
     });
 
     (doc as any).autoTable({
@@ -237,6 +234,12 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
         ['CÓD.', 'DESCRIPCIÓN', 'UNID.', 'CANT.', 'P. UNIT. NETO', 'TOTAL NETO']
       ],
       body: rows,
+      foot: [[
+        { content: `SUBTOTAL CAPÍTULO ${chapterNumber}`, colSpan: 5, styles: { halign: 'right' } },
+        { content: formatCLP(chapterTotal), styles: { halign: 'right' } }
+      ]],
+      showFoot: 'lastPage',
+      footStyles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', fontSize: 7.5 },
       theme: 'grid',
       styles: { fontSize: 7.5, font: 'helvetica' },
       headStyles: { fillColor: COLOR_HDG_BLUE, halign: 'center' },
@@ -250,7 +253,34 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
       }
     });
     currentY = (doc as any).lastAutoTable.finalY + 5;
+    chapterSummary.push({ n: chapterNumber, name: chap.name.toUpperCase(), total: chapterTotal });
   });
+
+  // Resumen por capítulo
+  if (chapterSummary.length > 0) {
+    if (currentY > 230) {
+      doc.addPage();
+      drawCorporateHeader(doc, project, 'Presupuesto de Obras');
+      currentY = 45;
+    }
+    (doc as any).autoTable({
+      startY: currentY + 5,
+      head: [[{ content: 'RESUMEN POR CAPÍTULO', colSpan: 4, styles: { halign: 'left' } }], ['N°', 'CAPÍTULO', 'TOTAL NETO', '% ']],
+      body: chapterSummary.map(r => [String(r.n), r.name, formatCLP(r.total), totalNetoProyecto > 0 ? `${formatNumber(r.total / totalNetoProyecto * 100, 1, 1)}%` : '—']),
+      foot: [[{ content: 'TOTAL NETO', colSpan: 2, styles: { halign: 'right' } }, formatCLP(totalNetoProyecto), '100,0%']],
+      theme: 'grid',
+      styles: { fontSize: 7.5, font: 'helvetica' },
+      headStyles: { fillColor: COLOR_HDG_BLUE, halign: 'center' },
+      footStyles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', halign: 'right' },
+      columnStyles: {
+        0: { cellWidth: 15, halign: 'center' },
+        1: { cellWidth: 'auto', halign: 'left' },
+        2: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 20, halign: 'right' }
+      }
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 2;
+  }
 
   let finalY = currentY + 10;
   if (finalY > 250) {

@@ -9,7 +9,8 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   title?: string;
   message: string;
-  itemName: string;
+  itemName?: string;
+  confirmText?: string;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -18,7 +19,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   onConfirm,
   title = "¿CONFIRMAR ACCIÓN?",
   message,
-  itemName
+  itemName,
+  confirmText = 'SÍ, ELIMINAR DEFINITIVAMENTE'
 }) => {
   if (!isOpen) return null;
 
@@ -40,7 +42,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
           {/* Mensaje */}
           <div className="text-slate-500 text-sm leading-relaxed mb-8 px-4">
-            {message} <span className="font-black text-[#004071]">"{itemName}"</span>.
+            {message}{itemName && <> <span className="font-black text-[#004071]">"{itemName}"</span>.</>}
             <br />
             Esta acción borrará todos los datos asociados.
           </div>
@@ -54,7 +56,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               }}
               className="w-full py-4 bg-[#E32626] hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95"
             >
-              SÍ, ELIMINAR DEFINITIVAMENTE
+              {confirmText}
             </button>
             <button
               onClick={onClose}

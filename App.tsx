@@ -1,6 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle } from 'lucide-react';
-import { useAppStore } from './store/useAppStore';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive } from 'lucide-react';
+import { useAppStore, STORAGE_ERROR_EVENT, getStorageUsage, STORAGE_QUOTA_BYTES } from './store/useAppStore';
+import ResourceSummary from './components/ResourceSummary';
+import ProjectSheet from './components/ProjectSheet';
+import QuickCalculator from './components/QuickCalculator';
+import ConfirmationModal from './components/ui/ConfirmationModal';
+import { normalizeApu } from './lib/apuCalculations';
+import { formatNumber } from './lib/number';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
 import ProjectModal from './components/ProjectModal';
@@ -28,8 +34,11 @@ const App: React.FC = () => {
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved,
-    reloadFromStorage
+    reloadFromStorage, sheet, setSheet
   } = useAppStore();
+  const [projectView, setProjectView] = useState<'budget' | 'resources' | 'sheet'>('budget');
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [storageUsage, setStorageUsage] = useState(0);
 
   const [currentApuId, setCurrentApuId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -90,6 +99,26 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // Monitoreo de almacenamiento local: aviso si falla la escritura o se acerca al límite
+  useEffect(() => {
+    let lastToast = 0;
+    const onError = () => {
+      if (Date.now() - lastToast < 15000) return;
+      lastToast = Date.now();
+      toast.error('No se pudo guardar localmente: almacenamiento del navegador lleno.', {
+        description: 'Respalde en Drive o exporte los proyectos a JSON y elimine proyectos antiguos.',
+        duration: 12000
+      });
+    };
+    window.addEventListener(STORAGE_ERROR_EVENT, onError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onError);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setStorageUsage(getStorageUsage()), 1500);
+    return () => clearTimeout(t);
+  }, [projects, chapters, apus, sheet]);
+  const storagePct = storageUsage / STORAGE_QUOTA_BYTES * 100;
+
   const saveRef = useRef(saveActiveProject);
   useEffect(() => { saveRef.current = saveActiveProject; }, [saveActiveProject]);
 
@@ -142,6 +171,8 @@ const App: React.FC = () => {
       setSaveStatus('saved');
       toast.success("Guardado localmente");
       setTimeout(() => setSaveStatus('idle'), 2000);
+    } else {
+      setSaveStatus('idle');
     }
   };
 
@@ -180,9 +211,31 @@ const App: React.FC = () => {
     }
   };
 
+  /** Descarga un respaldo completo del almacenamiento local (todos los proyectos) */
+  const downloadLocalBackup = () => {
+    const dump: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || '';
+      if (k.startsWith('apu_')) dump[k] = localStorage.getItem(k) || '';
+    }
+    const blob = new Blob([JSON.stringify({ type: 'apu-hdg-local-backup', createdAt: new Date().toISOString(), data: dump })], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HDG_respaldo_local_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
   const handleDriveLoad = async () => {
     if (!isDriveConnected()) { await handleDriveConnect(); if (!isDriveConnected()) return; }
+    setConfirmRestore(true);
+  };
+
+  const executeDriveLoad = async () => {
+    setConfirmRestore(false);
     try {
+      downloadLocalBackup();
       setDriveStatus('syncing');
       const backup = await loadFromDrive();
       if (!backup) { toast.info('No se encontró copia de seguridad en Drive.'); setDriveStatus('idle'); return; }
@@ -234,7 +287,8 @@ const App: React.FC = () => {
       project,
       chapters: chapters.filter(c => c.projectId === project.id),
       apus: apus.filter(a => a.projectId === project.id),
-      exportVersion: "2.0",
+      sheet: project.id === activeProjectId ? sheet : undefined,
+      exportVersion: "2.1",
       exportDate: new Date().toISOString()
     };
 
@@ -269,10 +323,10 @@ const App: React.FC = () => {
         const newChapters = data.chapters.map((c: any) => ({ ...c, id: safeUUID(), projectId: newProjectId, oldId: c.id }));
         const newApus = data.apus.map((a: any) => {
           const chapter = newChapters.find((nc: any) => nc.oldId === a.chapterId);
-          return { ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId };
+          return normalizeApu({ ...a, id: safeUUID(), projectId: newProjectId, chapterId: chapter?.id || a.chapterId }, newProject);
         });
 
-        const physicalData = { metadata: newProject, chapters: newChapters, apus: newApus };
+        const physicalData = { metadata: newProject, chapters: newChapters.map(({ oldId, ...c }: any) => c), apus: newApus, sheet: data.sheet || { cells: {} } };
         localStorage.setItem(`apu_engine_project_${newProjectId}`, JSON.stringify(physicalData));
         
         setProjects([newProject, ...projects]);
@@ -299,6 +353,7 @@ const App: React.FC = () => {
           setActiveProjectId(id);
           if (id) loadProject(id);
           setCurrentApuId(null);
+          setProjectView('budget');
         }}
         currentApuId={currentApuId}
         setCurrentApuId={(id) => { if (id !== currentApuId) setCurrentApuId(id); }}
@@ -308,7 +363,7 @@ const App: React.FC = () => {
         onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
         onLibraryOpen={setLibraryChapterId}
         onCreateApu={handleCreateApu}
-        onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; setApus([...apus, dup]); }}
+        onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; const i = apus.findIndex(x => x.id === a.id); const next = [...apus]; next.splice(i + 1, 0, dup); setApus(next); }}
         onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
         onShareProject={handleShareProject}
         handleImport={handleImport}
@@ -322,12 +377,12 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-slate-50">
         {activeProject ? (
           <>
-            <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+            <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
                 {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"><Menu className="w-5 h-5" /></button>}
                 <div className="min-w-0">
                   <h2 className="text-lg font-black text-[#004071] uppercase max-w-2xl whitespace-normal break-words leading-tight">
-                    {activeApu ? activeApu.name : `ESTRUCTURA GENERAL: ${activeProject.name}`}
+                    {activeApu ? activeApu.name : projectView === 'resources' ? `RESUMEN DE RECURSOS: ${activeProject.name}` : projectView === 'sheet' ? `HOJA DE CÁLCULO: ${activeProject.name}` : `ESTRUCTURA GENERAL: ${activeProject.name}`}
                   </h2>
                   <div className="flex items-center gap-3">
                     <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name}</p>
@@ -335,6 +390,14 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {storagePct >= 60 && (
+                  <span
+                    title={`Almacenamiento local usado: ${formatNumber(storageUsage / 1024 / 1024, 1, 1)} MB de ~5 MB. Respalde en Drive o exporte y elimine proyectos antiguos.`}
+                    className={`hidden md:flex items-center gap-1 text-[8px] font-black uppercase px-3 py-2 rounded-xl whitespace-nowrap ${storagePct >= 85 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}
+                  >
+                    <HardDrive className="w-3 h-3" /> {formatNumber(storagePct, 0, 0)}%
+                  </span>
+                )}
                 {lastSaved && (
                   <span className="hidden md:flex items-center gap-1 text-[8px] text-slate-500 font-black uppercase bg-slate-100 px-3 py-2 rounded-xl whitespace-nowrap">
                     <Clock className="w-3 h-3 text-[#88C13E]" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
@@ -432,6 +495,7 @@ const App: React.FC = () => {
                 >
                   <Download className="w-3 h-3" /> Reporte Excel
                 </button>
+                <QuickCalculator />
                 <button
                   onClick={() => setIsHelpOpen(true)}
                   title="Manual de operación"
@@ -455,13 +519,49 @@ const App: React.FC = () => {
                   />
                 </div>
               ) : (
-                <ProjectGeneralView
-                  project={activeProject}
-                  chapters={chapters}
-                  apus={apus}
-                  moveChapter={moveChapter}
-                  moveApu={moveApu}
-                />
+                <>
+                  <div className="max-w-6xl mx-auto mb-6 flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-fit">
+                    {([
+                      { id: 'budget', label: 'Presupuesto', icon: <LayoutList className="w-3.5 h-3.5" /> },
+                      { id: 'resources', label: 'Resumen de recursos', icon: <Layers className="w-3.5 h-3.5" /> },
+                      { id: 'sheet', label: 'Hoja de cálculo', icon: <Table2 className="w-3.5 h-3.5" /> }
+                    ] as const).map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => setProjectView(t.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${projectView === t.id ? 'bg-[#004071] text-white shadow' : 'text-slate-400 hover:text-[#004071] hover:bg-slate-50'}`}
+                      >
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {projectView === 'budget' && (
+                    <ProjectGeneralView
+                      project={activeProject}
+                      chapters={chapters}
+                      apus={apus}
+                      moveChapter={moveChapter}
+                      moveApu={moveApu}
+                      onToggleFlag={(id) => setApus(prev => prev.map(a => a.id === id ? { ...a, flagged: !a.flagged } : a))}
+                      onOpenApu={setCurrentApuId}
+                    />
+                  )}
+                  {projectView === 'resources' && (
+                    <ResourceSummary
+                      project={activeProject}
+                      chapters={chapters}
+                      apus={apus}
+                      onUpdateApus={(updated) => {
+                        const byId = new Map(updated.map(u => [u.id, u]));
+                        setApus(prev => prev.map(a => byId.get(a.id) || a));
+                      }}
+                      onOpenApu={setCurrentApuId}
+                    />
+                  )}
+                  {projectView === 'sheet' && (
+                    <ProjectSheet project={activeProject} sheet={sheet} onChange={setSheet} />
+                  )}
+                </>
               )}
             </div>
           </>
@@ -524,16 +624,18 @@ const App: React.FC = () => {
           onSelect={(libApu) => {
             if (activeProjectId) {
               const proj = projects.find(p => p.id === activeProjectId);
-              const nApu: APU = {
+              const nApu: APU = normalizeApu({
                 ...JSON.parse(JSON.stringify(libApu)),
                 id: safeUUID(),
                 projectId: activeProjectId,
                 chapterId: libraryChapterId,
-                socialLawsPercentage: proj?.globalSocialLaws || 30,
-                overheadPercentage: proj?.globalOverhead || 15,
-                utilityPercentage: proj?.globalUtility || 10,
+                useProjectGlobalRates: true,
+                flagged: false,
+                socialLawsPercentage: proj?.globalSocialLaws ?? 30,
+                overheadPercentage: proj?.globalOverhead ?? 15,
+                utilityPercentage: proj?.globalUtility ?? 10,
                 createdAt: Date.now()
-              };
+              }, proj);
               setApus([...apus, nApu]);
               setCurrentApuId(nApu.id);
             }
@@ -554,6 +656,14 @@ const App: React.FC = () => {
       )}
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+      <ConfirmationModal
+        isOpen={confirmRestore}
+        onClose={() => setConfirmRestore(false)}
+        onConfirm={executeDriveLoad}
+        title="Restaurar desde Google Drive"
+        message="Se reemplazarán TODOS los proyectos locales por la copia de Drive. Antes de restaurar se descargará automáticamente un respaldo local (JSON) por seguridad. ¿Continuar?"
+        confirmText="Sí, respaldar y restaurar"
+      />
     </div>
   );
 };

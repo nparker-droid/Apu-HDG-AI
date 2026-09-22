@@ -6,8 +6,10 @@ import SectionTable from './SectionTable';
 import { exportSingleApuToExcel } from '../services/excelExportService';
 import { calculateApuTotals } from '../lib/apuCalculations';
 import { toast } from 'sonner';
+import NumberInput from './ui/NumberInput';
+import { formatCLP as fmtCLP } from '../lib/number';
 
-const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
+const formatCLP = fmtCLP;
 const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/50' : '';
 
 interface APUEditorProps {
@@ -52,7 +54,7 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
         const unitPrice = Number(i.unitPrice) || 0;
         return { id: crypto.randomUUID(), description: i.description, unit: i.unit, quantity, performance, unitPrice, total: unitPrice * (usePerformance ? performance : quantity) };
       });
-      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials || []), [ItemCategory.MANO_DE_OBRA]: map(s.labor || [], true), [ItemCategory.EQUIPO]: map(s.equipment || [], true), [ItemCategory.OTROS]: [] } });
+      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials || []), [ItemCategory.MANO_DE_OBRA]: map(s.labor || [], true), [ItemCategory.EQUIPO]: map((s.equipment || []).map((i: any) => ({ ...i, quantity: Number(i.performance) || Number(i.quantity) || 1 }))), [ItemCategory.OTROS]: [] } });
       toast.success('APU generado por IA correctamente');
     } catch (e: any) {
       toast.error(`Error de IA: ${e?.message || 'No se pudo contactar a Gemini'}`);
@@ -127,7 +129,7 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
           </div>
           <div className="lg:col-span-4 grid grid-cols-2 gap-4">
             <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600 ${emptyFieldClass(!apu.unit)}`} /></div>
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><input type="text" inputMode="decimal" value={String(apu.quantity).replace('.', ',')} onFocus={e => e.currentTarget.select()} onChange={e => handleChange('quantity', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
+            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><NumberInput value={apu.quantity} maxDecimals={3} onValueChange={v => onUpdate({ ...apu, quantity: v })} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
           </div>
         </div>
 
@@ -148,11 +150,9 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
               {apu.divideUnitPrice && (
                 <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
                   <span className="text-[9px] font-black text-slate-400 uppercase">por:</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={apu.divisorQuantity ? String(apu.divisorQuantity).replace('.', ',') : ''}
-                    onChange={e => handleChange('divisorQuantity', e.target.value)}
+                  <NumberInput
+                    value={apu.divisorQuantity || 0}
+                    onValueChange={v => onUpdate({ ...apu, divisorQuantity: v })}
                     placeholder="Cantidad..."
                     className="w-20 py-1 bg-white border border-slate-200 rounded-lg text-center text-[10px] font-black text-[#004071]"
                   />
@@ -171,15 +171,15 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                 <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Leyes Soc. (%)</label>
-                <input type="number" step="0.1" value={laws} onChange={e => handleChange('socialLawsPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <NumberInput value={laws} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, socialLawsPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                 <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">GG (%)</label>
-                <input type="number" step="0.1" value={overhead} onChange={e => handleChange('overheadPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <NumberInput value={overhead} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, overheadPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
                 <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Utilidad (%)</label>
-                <input type="number" step="0.1" value={utility} onChange={e => handleChange('utilityPercentage', e.target.value)} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <NumberInput value={utility} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, utilityPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
               </div>
             </div>
           )}
