@@ -14,6 +14,8 @@ export interface APUItem {
   performance?: number;
   unitPrice: number;
   total: number;
+  /** Nota libre: origen del precio, pendientes, volatilidad, etc. */
+  note?: string;
 }
 
 export interface APU {
@@ -33,7 +35,10 @@ export interface APU {
   utilityPercentage: number;
   divideUnitPrice?: boolean;
   divisorQuantity?: number;
+  /** Indicador manual (pendiente / revisar) — solo visible en la app */
+  flagged?: boolean;
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface Chapter {
@@ -75,10 +80,17 @@ export interface SingleFieldSuggestion {
   reasoning: string;
 }
 
+/** Hoja de cálculo libre por proyecto. Claves de celda estilo "A1". */
+export interface ProjectSheet {
+  cells: Record<string, string>;
+  colWidths?: Record<number, number>;
+}
+
 export interface ProjectFullData {
   metadata: Project;
   chapters: Chapter[];
   apus: APU[];
+  sheet?: ProjectSheet;
 }
 
 export interface UserProfile {

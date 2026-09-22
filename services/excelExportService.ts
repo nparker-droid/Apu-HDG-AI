@@ -1,172 +1,175 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { saveBlobWithPicker } from './fileSaveService';
-import { calculateApuTotals } from '../lib/apuCalculations';
+import { calculateApuTotals, CATEGORIES, itemAmount } from '../lib/apuCalculations';
 
-const XLSX = (window as any).XLSX;
+// Exportación Excel con FÓRMULAS (trazable): cada total de línea, subtotal, CD, GG, Utilidad y P.U.
+// se calcula en la planilla; el presupuesto referencia el P.U. de cada hoja APU.
+// Los valores calculados se escriben también como caché (v) para lectores sin motor de cálculo.
 
-const numCell = (value: number) => ({
-    v: value,
-    t: 'n',
-    z: '#,##0'
-});
+const XLSX = () => (window as any).XLSX;
 
-const decCell = (value: number) => ({
-    v: value,
-    t: 'n',
-    z: '#,##0.00'
-});
+const FMT_CLP = '#,##0';
+const FMT_QTY = '#,##0.000';
+const FMT_PCT = '0.00%';
 
-const safeSheetName = (name: string, fallback: string) => {
-    const cleaned = (name || fallback).replace(/[\\/?*[\]:]/g, ' ').trim() || fallback;
-    return cleaned.substring(0, 31);
+const num = (v: number, z = FMT_CLP) => ({ t: 'n', v: Number(v) || 0, z });
+const fx = (f: string, v: number, z = FMT_CLP) => ({ t: 'n', f, v: Number(v) || 0, z });
+const str = (v: string) => ({ t: 's', v: v ?? '' });
+
+const safeSheetName = (name: string, used: Set<string>) => {
+  let base = (name || 'APU').replace(/[\\/?*[\]:]/g, ' ').trim().substring(0, 31) || 'APU';
+  let candidate = base; let i = 2;
+  while (used.has(candidate.toLowerCase())) { const suf = ` (${i++})`; candidate = base.substring(0, 31 - suf.length) + suf; }
+  used.add(candidate.toLowerCase());
+  return candidate;
 };
+const quoteSheet = (name: string) => `'${name.replace(/'/g, "''")}'`;
 
 const saveWorkbook = async (wb: any, fileName: string) => {
-    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    await saveBlobWithPicker(
-        blob,
-        fileName,
-        'Excel',
-        { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
-    );
+  const buffer = XLSX().write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  await saveBlobWithPicker(blob, fileName, 'Excel', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
+};
+
+/** Construye hoja de un array de filas (celdas ya tipadas o strings). */
+const buildSheet = (rows: any[][], cols: number[]) => {
+  const ws: any = {};
+  let maxC = 0;
+  rows.forEach((row, r) => row.forEach((cell, c) => {
+    if (cell === undefined || cell === null || cell === '') return;
+    ws[XLSX().utils.encode_cell({ r, c })] = typeof cell === 'object' ? cell : (typeof cell === 'number' ? num(cell) : str(String(cell)));
+    maxC = Math.max(maxC, c);
+  }));
+  ws['!ref'] = XLSX().utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(rows.length - 1, 0), c: Math.max(maxC, cols.length - 1) } });
+  ws['!cols'] = cols.map(wch => ({ wch }));
+  return ws;
+};
+
+/** Hoja APU con fórmulas. Devuelve la hoja y la celda del P.U. neto. */
+const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
+  const st = calculateApuTotals(apu, project);
+  const rows: any[][] = [
+    ['ANÁLISIS DE PRECIO UNITARIO'],
+    [`PARTIDA: ${apuNumber} - ${(apu.name || '').toUpperCase()}`],
+    [`UNIDAD: ${apu.unit} | CANTIDAD PROYECTO: ${apu.quantity}`],
+    [],
+    ['CATEGORÍA', 'RECURSO / DESCRIPCIÓN', 'UNIDAD', 'REND/CANT', 'P. UNITARIO', 'TOTAL', 'NOTA']
+  ];
+  const R = () => rows.length + 1; // número de fila Excel de la próxima fila
+  const subtotalRefs: string[] = [];
+
+  CATEGORIES.forEach(cat => {
+    const items = apu.items?.[cat] ?? [];
+    if (items.length === 0) return;
+    const isLabor = cat === ItemCategory.MANO_DE_OBRA;
+    rows.push([cat]);
+    const first = R();
+    items.forEach(i => {
+      const r = R();
+      rows.push(['', i.description, i.unit, num(itemAmount(cat, i), FMT_QTY), num(Number(i.unitPrice) || 0), fx(`D${r}*E${r}`, i.total), i.note || '']);
+    });
+    const last = R() - 1;
+    const rawSum = items.reduce((s, i) => s + (Number(i.total) || 0), 0);
+    if (isLabor) {
+      const rSub = R();
+      rows.push(['', 'SUBTOTAL MANO DE OBRA (sin leyes sociales)', '', '', '', fx(`SUM(F${first}:F${last})`, rawSum)]);
+      const rLs = R();
+      rows.push(['', 'LEYES SOCIALES', '', '', num(st.laws / 100, FMT_PCT), fx(`F${rSub}*E${rLs}`, st.lawsAmount)]);
+      const rTot = R();
+      rows.push(['', 'SUBTOTAL MANO DE OBRA', '', '', '', fx(`F${rSub}+F${rLs}`, st.subMoTotal)]);
+      subtotalRefs.push(`F${rTot}`);
+    } else {
+      const rTot = R();
+      rows.push(['', `SUBTOTAL ${cat}`, '', '', '', fx(`SUM(F${first}:F${last})`, rawSum)]);
+      subtotalRefs.push(`F${rTot}`);
+    }
+    rows.push([]);
+  });
+
+  const rCd = R();
+  rows.push(['', 'COSTO DIRECTO UNITARIO', '', '', '', fx(subtotalRefs.length ? subtotalRefs.join('+') : '0', st.costoDirecto)]);
+  const rGg = R();
+  rows.push(['', 'GASTOS GENERALES', '', '', num(st.overhead / 100, FMT_PCT), fx(`F${rCd}*E${rGg}`, st.costoDirecto * st.overhead / 100)]);
+  const rUt = R();
+  rows.push(['', 'UTILIDAD', '', '', num(st.utility / 100, FMT_PCT), fx(`F${rCd}*E${rUt}`, st.costoDirecto * st.utility / 100)]);
+  const rNeto = R();
+  rows.push(['', 'COSTO NETO UNITARIO', '', '', '', fx(`F${rCd}+F${rGg}+F${rUt}`, st.costoNetoUnitario)]);
+  let puRow = rNeto;
+  if (apu.divideUnitPrice && (apu.divisorQuantity || 0) > 0) {
+    puRow = R();
+    rows.push(['', `PRECIO UNITARIO NETO (por ${apu.divisorQuantity} ${apu.unit})`, '', num(apu.divisorQuantity!, FMT_QTY), '', fx(`F${rNeto}/D${puRow}`, st.precioUnitarioNeto)]);
+  }
+
+  const ws = buildSheet(rows, [15, 48, 10, 12, 15, 15, 40]);
+  return { ws, puCell: `F${puRow}`, pu: st.precioUnitarioNeto };
 };
 
 export const exportProjectToExcel = async (project: Project, chapters: Chapter[], apus: APU[]) => {
-    if (!XLSX) { console.error("XLSX no cargado"); return; }
+  if (!XLSX()) { console.error('XLSX no cargado'); return; }
+  const wb = XLSX().utils.book_new();
+  const used = new Set<string>(['presupuesto']);
+  const projectChapters = chapters.filter(c => c.projectId === project.id);
 
-    const wb = XLSX.utils.book_new();
-
-    const budgetRows: any[] = [
-        ["HIDROGESTIÓN - REPORTE DE PRESUPUESTO"],
-        [`PROYECTO: ${project.name.toUpperCase()}`],
-        [`CÓDIGO: ${project.code} | FECHA: ${project.date} | VERSIÓN: ${project.version}`],
-        [],
-        ["ÍTEM", "DESCRIPCIÓN", "UNIDAD", "CANTIDAD", "P.U. NETO", "TOTAL NETO"]
-    ];
-
-    let grandTotalNeto = 0;
-    const sortedChapters = chapters.filter(c => c.projectId === project.id);
-
-    sortedChapters.forEach((chap, cIdx) => {
-        const chapterNumber = cIdx + 1;
-        budgetRows.push([chapterNumber, chap.name.toUpperCase(), "", "", "", ""]);
-
-        const chapApus = apus.filter(a => a.chapterId === chap.id);
-
-        chapApus.forEach((apu, aIdx) => {
-            const apuNumber = `${chapterNumber}.${aIdx + 1}`;
-            const stats = calculateApuTotals(apu, project);
-            const totalPartida = stats.precioUnitarioNeto * apu.quantity;
-            grandTotalNeto += totalPartida;
-
-            budgetRows.push([
-                apuNumber,
-                apu.name,
-                apu.unit,
-                decCell(Number(apu.quantity) || 0),
-                numCell(stats.precioUnitarioNeto),
-                numCell(totalPartida)
-            ]);
-        });
-        budgetRows.push([]);
+  // 1) Hojas APU (primero, para conocer sus nombres y celda de P.U.)
+  const apuSheets: { name: string; ws: any }[] = [];
+  const puRef = new Map<string, { ref: string; pu: number }>();
+  projectChapters.forEach((chap, cIdx) => {
+    apus.filter(a => a.chapterId === chap.id).forEach((apu, aIdx) => {
+      const number = `${cIdx + 1}.${aIdx + 1}`;
+      const { ws, puCell, pu } = createApuWorksheet(apu, project, number);
+      const name = safeSheetName(`APU ${number}`, used);
+      apuSheets.push({ name, ws });
+      puRef.set(apu.id, { ref: `${quoteSheet(name)}!${puCell}`, pu });
     });
+  });
 
-    budgetRows.push(
-        [],
-        ["", "", "", "", "SUBTOTAL NETO", numCell(grandTotalNeto)],
-        ["", "", "", "", "IVA (19%)", numCell(grandTotalNeto * 0.19)],
-        ["", "", "", "", "TOTAL PROYECTO (CLP)", numCell(grandTotalNeto * 1.19)]
-    );
-
-    const wsBudget = XLSX.utils.aoa_to_sheet(budgetRows);
-
-    wsBudget['!cols'] = [
-        { wch: 10 },
-        { wch: 50 },
-        { wch: 10 },
-        { wch: 12 },
-        { wch: 15 },
-        { wch: 18 }
-    ];
-
-    XLSX.utils.book_append_sheet(wb, wsBudget, "Presupuesto");
-
-    apus.filter(a => a.projectId === project.id).forEach((apu, idx) => {
-        const chapterIndices = chapters.filter(c => c.projectId === project.id);
-        const cIdx = chapterIndices.findIndex(c => c.id === apu.chapterId);
-        const chapterApus = apus.filter(a => a.chapterId === apu.chapterId);
-        const aIdx = chapterApus.findIndex(a => a.id === apu.id);
-
-        const apuNumber = (cIdx !== -1) ? `${cIdx + 1}.${aIdx + 1}` : apu.code;
-        const wsApu = createApuWorksheet(apu, project, apuNumber);
-        const sheetName = safeSheetName(`APU ${apu.code || idx + 1}`, `APU ${idx + 1}`);
-        XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
+  // 2) Presupuesto
+  const rows: any[][] = [
+    ['HIDROGESTIÓN - REPORTE DE PRESUPUESTO'],
+    [`PROYECTO: ${(project.name || '').toUpperCase()}`],
+    [`CÓDIGO: ${project.code} | FECHA: ${project.date} | VERSIÓN: ${project.version}`],
+    [],
+    ['ÍTEM', 'DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P.U. NETO', 'TOTAL NETO']
+  ];
+  const R = () => rows.length + 1;
+  const chapterTotals: string[] = [];
+  let grand = 0;
+  projectChapters.forEach((chap, cIdx) => {
+    const n = cIdx + 1;
+    rows.push([String(n), (chap.name || '').toUpperCase()]);
+    const chapApus = apus.filter(a => a.chapterId === chap.id);
+    const first = R();
+    let chapSum = 0;
+    chapApus.forEach((apu, aIdx) => {
+      const r = R();
+      const ref = puRef.get(apu.id)!;
+      const qty = Number(apu.quantity) || 0;
+      const total = ref.pu * qty;
+      chapSum += total;
+      rows.push([`${n}.${aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
     });
+    const last = R() - 1;
+    const rSub = R();
+    rows.push(['', `SUBTOTAL CAPÍTULO ${n}`, '', '', '', fx(chapApus.length ? `SUM(F${first}:F${last})` : '0', chapSum)]);
+    chapterTotals.push(`F${rSub}`);
+    grand += chapSum;
+    rows.push([]);
+  });
+  const rNet = R();
+  rows.push(['', '', '', '', 'SUBTOTAL NETO', fx(chapterTotals.length ? chapterTotals.join('+') : '0', grand)]);
+  const rIva = R();
+  rows.push(['', '', '', '', 'IVA (19%)', fx(`F${rNet}*0.19`, grand * 0.19)]);
+  rows.push(['', '', '', '', 'TOTAL PROYECTO (CLP)', fx(`F${rNet}+F${rIva}`, grand * 1.19)]);
 
-    await saveWorkbook(wb, `HDG_REPORTE_${project.code}.xlsx`);
+  XLSX().utils.book_append_sheet(wb, buildSheet(rows, [10, 55, 10, 12, 18, 18]), 'Presupuesto');
+  apuSheets.forEach(s => XLSX().utils.book_append_sheet(wb, s.ws, s.name));
+  await saveWorkbook(wb, `HDG_REPORTE_${project.code}.xlsx`);
 };
 
 export const exportSingleApuToExcel = async (project: Project, apu: APU) => {
-    if (!XLSX) { console.error("XLSX no cargado"); return; }
-    const wb = XLSX.utils.book_new();
-    const wsApu = createApuWorksheet(apu, project, apu.code);
-    const sheetName = safeSheetName(`APU ${apu.code}`, 'APU');
-    XLSX.utils.book_append_sheet(wb, wsApu, sheetName);
-    await saveWorkbook(wb, `HDG_APU_${apu.code}_${apu.name.substring(0, 20)}.xlsx`);
+  if (!XLSX()) { console.error('XLSX no cargado'); return; }
+  const wb = XLSX().utils.book_new();
+  const { ws } = createApuWorksheet(apu, project, apu.code);
+  XLSX().utils.book_append_sheet(wb, ws, safeSheetName(`APU ${apu.code}`, new Set()));
+  await saveWorkbook(wb, `HDG_APU_${apu.code}_${(apu.name || '').substring(0, 20)}.xlsx`);
 };
-
-const createApuWorksheet = (apu: APU, project: Project, apuNumber: string) => {
-    const stats = calculateApuTotals(apu, project);
-    const apuRows: any[] = [
-        ["ANÁLISIS DE PRECIO UNITARIO"],
-        [`PARTIDA: ${apuNumber} - ${apu.name.toUpperCase()}`],
-        [`UNIDAD: ${apu.unit} | CANTIDAD PROYECTO: ${apu.quantity}`],
-        [],
-        ["CATEGORÍA", "RECURSO / DESCRIPCIÓN", "UNIDAD", "REND/CANT", "P. UNITARIO", "TOTAL"]
-    ];
-
-    Object.values(ItemCategory).forEach(cat => {
-        const items = apu.items[cat];
-        if (items.length > 0) {
-            apuRows.push([cat, "", "", "", "", ""]);
-            items.forEach(i => {
-                apuRows.push([
-                    "",
-                    i.description,
-                    i.unit,
-                    decCell(cat === ItemCategory.MANO_DE_OBRA ? (Number(i.performance) || 0) : (Number(i.quantity) || 0)),
-                    numCell(i.unitPrice),
-                    numCell(i.total)
-                ]);
-            });
-            const subCat = items.reduce((s, i) => s + i.total, 0);
-            apuRows.push(["", `SUBTOTAL ${cat}`, "", "", "", numCell(subCat)]);
-            apuRows.push([]);
-        }
-    });
-
-    const unitPriceRowLabel = apu.divideUnitPrice
-        ? `PRECIO UNITARIO NETO (por ${apu.divisorQuantity || 1} ${apu.unit})`
-        : "PRECIO UNITARIO NETO";
-
-    apuRows.push(
-        ["", "COSTO DIRECTO UNITARIO", "", "", "", numCell(stats.costoDirecto)],
-        ["", `GASTOS GENERALES (${stats.overhead}%)`, "", "", "", numCell(stats.costoDirecto * (stats.overhead / 100))],
-        ["", `UTILIDAD (${stats.utility}%)`, "", "", "", numCell(stats.costoDirecto * (stats.utility / 100))],
-        ["", unitPriceRowLabel, "", "", "", numCell(stats.precioUnitarioNeto)]
-    );
-
-    const wsApu = XLSX.utils.aoa_to_sheet(apuRows);
-    wsApu['!cols'] = [
-        { wch: 15 },
-        { wch: 45 },
-        { wch: 10 },
-        { wch: 12 },
-        { wch: 15 },
-        { wch: 15 }
-    ];
-    return wsApu;
-};
-
-// calculateApuTotals importado desde lib/apuCalculations — fuente única de verdad para todos los módulos

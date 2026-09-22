@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getZeroCostInfo } from '../../lib/apuCalculations';
 import { Plus, X, ChevronRight, BookOpen, Trash2, Upload, Share2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
@@ -274,7 +275,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                             currentApuId === apu.id ? 'bg-[#88C13E] text-white shadow-md scale-[1.02]' : 'hover:bg-indigo-50 text-slate-500'
                                                         )}
                                                     >
-                                                        <span className="pr-2 font-bold whitespace-normal break-words leading-tight">{apu.code} {apu.name}</span>
+                                                        <span className="pr-2 font-bold whitespace-normal break-words leading-tight">
+                                                            {(() => { const pr = projects.find(p => p.id === apu.projectId); return pr && getZeroCostInfo(apu, pr).isZero ? <span title="Costos en $0 — falta completar" className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle" /> : null; })()}
+                                                            {apu.flagged && <span title="Partida marcada" className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 align-middle" />}
+                                                            {apu.code} {apu.name}</span>
                                                         <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
                                                             <div className="flex flex-col mr-1">
                                                                 <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
