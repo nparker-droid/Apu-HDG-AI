@@ -79,8 +79,11 @@ const toNum = (v: CellValue): number => {
   throw new Error('#VALOR!');
 };
 
+/** Colapsa miles agrupados con "." antes de tokenizar (p.ej. "1.500" → "1500", "12.345.678,9" → "12345678,9"). */
+const collapseThousands = (src: string) => src.replace(/\d{1,3}(?:\.\d{3})+(?:,\d+)?/g, m => m.replace(/\./g, ''));
+
 export const evaluate = (src: string, resolve: Resolver = () => 0): CellValue => {
-  const toks = tokenize(src);
+  const toks = tokenize(collapseThousands(src));
   let p = 0;
   const peek = () => toks[p];
   const isOp = (v: string) => { const t = toks[p]; return t && t.t === 'op' && t.v === v; };

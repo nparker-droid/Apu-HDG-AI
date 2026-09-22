@@ -90,7 +90,8 @@ const SectionTable: React.FC<SectionTableProps> = ({
         quantity: typeof copied.quantity === 'number' ? copied.quantity : 1,
         performance: typeof copied.performance === 'number' ? copied.performance : 1,
         unitPrice: typeof copied.unitPrice === 'number' ? copied.unitPrice : 0,
-        total: 0
+        total: 0,
+        note: copied.note || undefined
       };
       
       const isLabor = category === ItemCategory.MANO_DE_OBRA;

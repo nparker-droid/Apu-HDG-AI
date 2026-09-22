@@ -41,6 +41,9 @@ interface Group {
 
 const normKey = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 
+/** Clave de ocurrencia (APU + recurso): los ítems duplicados vía "Duplicar APU" conservan su itemId original. */
+const occKey = (apuId: string, itemId: string) => `${apuId}::${itemId}`;
+
 const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApus, onOpenApu }) => {
   const [category, setCategory] = useState<ItemCategory>(ItemCategory.MANO_DE_OBRA);
   const [search, setSearch] = useState('');
@@ -101,16 +104,17 @@ const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApu
     return s + (t.costoDirecto / divisor) * (Number(a.quantity) || 0);
   }, 0), [projectApus, project]);
 
-  /** Aplica cambios a todas (o algunas) ocurrencias del grupo */
-  const applyToGroup = (g: Group, patch: { unitPrice?: number; unit?: string; description?: string }, onlyItemIds?: Set<string>) => {
+  /** Aplica cambios a todas (o algunas) ocurrencias del grupo. Cada ocurrencia se identifica por APU+recurso,
+   *  porque "Duplicar APU" clona los ítems conservando su itemId original. */
+  const applyToGroup = (g: Group, patch: { unitPrice?: number; unit?: string; description?: string }, onlyOccurrenceKeys?: Set<string>) => {
     const affected = new Set(g.occurrences.map(o => o.apu.id));
-    const ids = onlyItemIds || new Set(g.occurrences.map(o => o.itemId));
+    const keys = onlyOccurrenceKeys || new Set(g.occurrences.map(o => occKey(o.apu.id, o.itemId)));
     const updated = projectApus.filter(a => affected.has(a.id)).map(a => ({
       ...a,
       items: {
         ...a.items,
         [category]: (a.items[category] ?? []).map(it => {
-          if (!ids.has(it.id)) return it;
+          if (!keys.has(occKey(a.id, it.id))) return it;
           const n = { ...it, ...patch };
           n.total = computeItemTotal(category, n);
           return n;
@@ -240,7 +244,7 @@ const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApu
                             mode="money"
                             maxDecimals={2}
                             value={o.unitPrice}
-                            onValueChange={v => applyToGroup(g, { unitPrice: v }, new Set([o.itemId]))}
+                            onValueChange={v => applyToGroup(g, { unitPrice: v }, new Set([occKey(o.apu.id, o.itemId)]))}
                             className={`w-24 text-right font-mono text-[10px] font-bold bg-white border rounded-lg px-2 py-1 outline-none focus:border-[#004071] ${g.hasPriceDiff && o.unitPrice !== g.max ? 'text-slate-600 border-slate-200' : g.hasPriceDiff ? 'text-amber-600 border-amber-200' : 'text-slate-600 border-slate-200'}`}
                           />
                         </td>
