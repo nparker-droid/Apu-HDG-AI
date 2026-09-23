@@ -247,7 +247,11 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
       const w = Math.max(50, st.w + e.clientX - st.x);
       onChange({ ...sheet, colWidths: { ...colWidths, [st.c]: w } });
     };
-    const onUp = () => { resizeRef.current = null; setDragging(false); };
+    // Global (no solo dentro de la grilla): si se suelta el mouse fuera del área
+    // scrolleable mientras se arrastra un rango de referencia de fórmula, igual hay
+    // que limpiar el estado — si no, el siguiente mouseenter sobre una celda (sin
+    // botón presionado) seguiría insertando/reemplazando la referencia.
+    const onUp = () => { resizeRef.current = null; setDragging(false); pickRef.current = null; };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
@@ -342,7 +346,6 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
         onCopy={e => onCopy(e)}
         onCut={e => onCopy(e, true)}
         onPaste={onPaste}
-        onMouseUp={() => { setDragging(false); pickRef.current = null; }}
         className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto outline-none max-h-[calc(100vh-260px)] ${dragging ? 'select-none' : ''}`}
       >
         <table className="border-collapse text-[11px] select-none" style={{ tableLayout: 'fixed', width: 44 + Array.from({ length: COLS }, (_, c) => colWidths[c] || DEFAULT_W).reduce((a, b) => a + b, 0) }}>
