@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { getZeroCostInfo } from '../../lib/apuCalculations';
-import { Plus, X, ChevronRight, BookOpen, Trash2, Upload, Share2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table } from 'lucide-react';
+import { Plus, X, ChevronRight, BookOpen, Trash2, Upload, Share2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table, GripVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
 import { exportProjectToPDF, exportBudgetToPDF } from '../../services/exportService';
@@ -27,7 +27,7 @@ interface SidebarProps {
     projects: Project[];
     chapters: Chapter[];
     apus: APU[];
-    moveChapter: (id: string, dir: 'up' | 'down') => void;
+    reorderChapter: (chapterId: string, beforeChapterId: string | null) => void;
     deleteChapter: (id: string) => void;
     currentProjectId: string | null;
     setCurrentProjectId: (id: string | null) => void;
@@ -52,7 +52,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
     isOpen, setIsOpen,
-    projects, chapters, apus, moveChapter, deleteChapter,
+    projects, chapters, apus, reorderChapter, deleteChapter,
     currentProjectId, setCurrentProjectId,
     currentApuId, setCurrentApuId,
     onNewProject, onUserLibraryOpen, onEditProject, onNewChapter,
@@ -73,6 +73,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [editingChapterName, setEditingChapterName] = useState('');
     const [draggedApuId, setDraggedApuId] = useState<string | null>(null);
     const [dragOver, setDragOver] = useState<{ chapterId: string; apuId: string | null } | null>(null);
+    const [draggedChapterId, setDraggedChapterId] = useState<string | null>(null);
+    const [dragOverChapterId, setDragOverChapterId] = useState<string | null>(null);
+    const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
 
     const handleConfirmAction = () => {
         if (!confirmDelete) return;
@@ -181,8 +184,32 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                                 {chapters.filter(c => c.projectId === project.id).map(chapter => (
                                     <div key={chapter.id} className="space-y-1 relative">
-                                        <div className="flex flex-col p-2 bg-white border border-slate-100 rounded-xl space-y-2 group/chapter">
-                                            <div className="flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        {dragOverChapterId === chapter.id && draggedChapterId !== null && draggedChapterId !== chapter.id && (
+                                            <div className="h-0.5 bg-[#004071] rounded-full mx-1 mb-1" />
+                                        )}
+                                        <div
+                                            draggable
+                                            onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
+                                            onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); }}
+                                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id); }}
+                                            onDrop={(e) => {
+                                                e.preventDefault(); e.stopPropagation();
+                                                if (draggedChapterId && draggedChapterId !== chapter.id) reorderChapter(draggedChapterId, chapter.id);
+                                                setDraggedChapterId(null); setDragOverChapterId(null);
+                                            }}
+                                            className={cn(
+                                                "flex flex-col p-2 bg-[#004071]/[0.06] border border-[#004071]/15 rounded-xl space-y-2 group/chapter select-none transition-opacity",
+                                                draggedChapterId === chapter.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'
+                                            )}
+                                        >
+                                            <div className="flex items-center justify-between text-[9px] font-black text-[#004071] uppercase tracking-widest">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setCollapsedChapters(prev => ({ ...prev, [chapter.id]: !prev[chapter.id] })); }}
+                                                    className="p-0.5 shrink-0 text-[#004071]/50 hover:text-[#004071]"
+                                                    title={collapsedChapters[chapter.id] ? 'Expandir capítulo' : 'Contraer capítulo'}
+                                                >
+                                                    <ChevronRight className={cn("w-3 h-3 transition-transform", !collapsedChapters[chapter.id] && 'rotate-90')} />
+                                                </button>
                                                 {editingChapterId === chapter.id ? (
                                                     <input
                                                         autoFocus
@@ -209,8 +236,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     >
                                                         <Edit3 className="w-3 h-3" />
                                                     </button>
-                                                    <button onClick={() => moveChapter(chapter.id, 'up')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronUp className="w-3 h-3" /></button>
-                                                    <button onClick={() => moveChapter(chapter.id, 'down')} className="text-slate-300 hover:text-[#004071] p-0.5"><ChevronDown className="w-3 h-3" /></button>
+                                                    <GripVertical className="w-3 h-3 text-[#004071]/30" title="Arrastrar para reordenar" />
                                                     <button
                                                         onClick={() => setChapterActionMenu(prev => prev?.chapterId === chapter.id ? null : { projectId: project.id, chapterId: chapter.id })}
                                                         className="text-[#004071] hover:text-[#88C13E] p-0.5"
@@ -257,7 +283,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
                                             onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
                                         >
-                                            {apus.filter(a => a.chapterId === chapter.id).map(apu => (
+                                            {collapsedChapters[chapter.id] && apus.filter(a => a.chapterId === chapter.id).length > 0 && (
+                                                <div className="px-2 py-1.5 text-[8px] font-bold text-slate-300 italic">
+                                                    {apus.filter(a => a.chapterId === chapter.id).length} partida(s) — contraído
+                                                </div>
+                                            )}
+                                            {!collapsedChapters[chapter.id] && apus.filter(a => a.chapterId === chapter.id).map(apu => (
                                                 <div key={apu.id}>
                                                     {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
                                                         <div className="h-0.5 bg-[#004071] rounded-full mx-1 my-0.5" />
@@ -304,6 +335,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         </div>
                                     </div>
                                 ))}
+                                {draggedChapterId && (
+                                    <div
+                                        onDragOver={(e) => { e.preventDefault(); setDragOverChapterId('__end__'); }}
+                                        onDrop={(e) => { e.preventDefault(); reorderChapter(draggedChapterId, null); setDraggedChapterId(null); setDragOverChapterId(null); }}
+                                        className={cn("h-4 rounded-full mx-1 transition-colors", dragOverChapterId === '__end__' ? 'bg-[#004071]/20' : '')}
+                                    />
+                                )}
                                 <button onClick={() => onNewChapter(project.id)} className="w-full text-left p-2.5 text-[10px] text-[#004071] hover:bg-[#004071] hover:text-white rounded-xl flex items-center gap-2 font-black uppercase tracking-widest transition-all shadow-sm border border-dashed border-[#004071]/20"><Plus className="w-3 h-3" /> Añadir Capítulo</button>
                             </div>
                         )}

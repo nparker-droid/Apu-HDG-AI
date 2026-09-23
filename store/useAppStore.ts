@@ -178,6 +178,30 @@ export const useAppStore = () => {
     });
   }, []);
 
+  /** Reordena un capítulo dentro de su proyecto, insertándolo antes de `beforeChapterId` (o al final si es null). */
+  const reorderChapter = useCallback((chapterId: string, beforeChapterId: string | null) => {
+    setChapters(prev => {
+      const chapter = prev.find(c => c.id === chapterId);
+      if (!chapter || chapterId === beforeChapterId) return prev;
+      const without = prev.filter(c => c.id !== chapterId);
+      if (beforeChapterId !== null) {
+        const insertIdx = without.findIndex(c => c.id === beforeChapterId);
+        if (insertIdx !== -1) {
+          const result = [...without];
+          result.splice(insertIdx, 0, chapter);
+          return result;
+        }
+      }
+      let insertPos = without.length;
+      for (let i = without.length - 1; i >= 0; i--) {
+        if (without[i].projectId === chapter.projectId) { insertPos = i + 1; break; }
+      }
+      const result = [...without];
+      result.splice(insertPos, 0, chapter);
+      return result;
+    });
+  }, []);
+
   const deleteChapter = useCallback((id: string) => {
     setChapters(prev => prev.filter(c => c.id !== id));
     setApus(prev => prev.filter(a => a.chapterId !== id));
@@ -265,7 +289,7 @@ export const useAppStore = () => {
   return {
     sheet, setSheet,
     projects, setProjects,
-    chapters, setChapters, addChapter, moveChapter, deleteChapter,
+    chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
