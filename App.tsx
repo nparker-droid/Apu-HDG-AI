@@ -29,7 +29,7 @@ const safeUUID = () => crypto.randomUUID();
 const App: React.FC = () => {
   const {
     projects, setProjects,
-    chapters, setChapters, addChapter, moveChapter, deleteChapter,
+    chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
@@ -347,7 +347,7 @@ const App: React.FC = () => {
       <Sidebar
         isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen}
         projects={projects} chapters={chapters} apus={apus}
-        moveChapter={moveChapter} deleteChapter={deleteChapter}
+        reorderChapter={reorderChapter} deleteChapter={deleteChapter}
         currentProjectId={activeProjectId}
         setCurrentProjectId={(id) => {
           setActiveProjectId(id);
