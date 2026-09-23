@@ -7,7 +7,7 @@
     <title>APU Master AI - Hidrogestión</title>
 
      <!-- PWA y Meta Tags de Aplicación -->
-    <meta name="theme-color" content="#004071">
+    <meta name="theme-color" content="#1D5A82">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="APU Master">
     <link rel="manifest" href="/manifest.json">
@@ -20,7 +20,28 @@
     
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ink: '#16181B',
+              surface: '#FBFBFC',
+              sidebar: '#F1F2F4',
+              border: { DEFAULT: '#E3E5E8', soft: '#E7E9EC' },
+              muted: { DEFAULT: '#8A9098', light: '#9AA0A8', dark: '#5B6168' },
+              brand: { blue: '#1D5A82', 'blue-dark': '#164865', green: '#5B8C3A', 'green-dark': '#4A7530' },
+              status: { amber: '#D19A3D', red: '#D1483D' },
+            },
+            fontFamily: {
+              display: ['Sora', 'sans-serif'],
+              sans: ['"Public Sans"', 'Inter', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Public+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     
     <!-- Librerías de Exportación (PDF y Excel) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -48,12 +69,12 @@
     <link rel="stylesheet" href="./index.css">
     
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Public Sans', 'Inter', sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body class="bg-surface text-ink">
     <div id="root"></div>
     
     <script type="module" src="./index.tsx"></script>
