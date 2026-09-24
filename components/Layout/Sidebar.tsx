@@ -122,15 +122,27 @@ const Sidebar: React.FC<SidebarProps> = ({
                     draggable
                     onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
                     onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); }}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id); }}
+                    onDragOver={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        if (draggedApuId) { setDragOver({ chapterId: chapter.id, apuId: null }); return; }
+                        if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id);
+                    }}
                     onDrop={(e) => {
                         e.preventDefault(); e.stopPropagation();
+                        if (draggedApuId) {
+                            // Soltar una partida sobre el encabezado la mueve al final de este capítulo/subcapítulo
+                            moveApuToChapter(draggedApuId, chapter.id, null);
+                            setCollapsedChapters(prev => ({ ...prev, [chapter.id]: false }));
+                            setDraggedApuId(null); setDragOver(null);
+                            return;
+                        }
                         if (draggedChapterId && draggedChapterId !== chapter.id) reorderChapter(draggedChapterId, chapter.id);
                         setDraggedChapterId(null); setDragOverChapterId(null);
                     }}
                     className={cn(
-                        "flex flex-col p-2 rounded-xl space-y-2 group/chapter select-none transition-opacity",
+                        "flex flex-col p-2 rounded-xl space-y-2 group/chapter select-none transition-all",
                         isSubchapter ? "bg-brand-blue/[0.03] border border-brand-blue/10" : "bg-brand-blue/[0.06] border border-brand-blue/15",
+                        draggedApuId && dragOver?.chapterId === chapter.id && dragOver?.apuId === null && 'ring-2 ring-brand-blue/40',
                         draggedChapterId === chapter.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'
                     )}
                 >
@@ -230,6 +242,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
                         <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
                             {chapterApus.length} partida(s) — contraído
+                        </div>
+                    )}
+                    {draggedApuId && !collapsedChapters[chapter.id] && chapterApus.length === 0 && (
+                        <div className={cn(
+                            "px-2 py-2.5 rounded-xl border border-dashed text-center text-[8px] font-semibold uppercase tracking-widest transition-colors",
+                            dragOver?.chapterId === chapter.id ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-border text-muted-light'
+                        )}>
+                            Soltar partida aquí
                         </div>
                     )}
                     {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
