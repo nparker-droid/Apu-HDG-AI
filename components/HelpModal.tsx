@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Layers, DollarSign, Cpu, CloudUpload, Download, BookOpen } from 'lucide-react';
+import { Layers, DollarSign, Cpu, CloudUpload, Download, BookOpen } from 'lucide-react';
+import { Modal, ModalHeader } from './ui/Modal';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -115,105 +116,89 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
   const active = SECTIONS.find(s => s.id === activeId) || SECTIONS[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+    <Modal onClose={onClose} maxWidth="max-w-4xl" height="h-[85vh]" closeOnBackdrop>
+      <ModalHeader
+        icon={<BookOpen className="w-4 h-4" />}
+        title="Referencia Técnica"
+        subtitle="APU Engine · Manual de operación"
+        onClose={onClose}
+        tone="brand"
+      />
 
-      <div className="relative w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+      {/* Body */}
+      <div className="flex flex-1 min-h-0">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-7 py-4 bg-[#004071] shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-white" />
+        {/* Sidebar nav */}
+        <nav className="w-52 bg-sidebar border-r border-border flex flex-col py-4 shrink-0 overflow-y-auto no-scrollbar">
+          {SECTIONS.map((s) => {
+            const isActive = s.id === activeId;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setActiveId(s.id)}
+                className={`relative flex items-center gap-3 px-5 py-3 text-left transition-all ${
+                  isActive
+                    ? 'text-brand-blue font-bold'
+                    : 'text-muted-dark font-semibold hover:text-brand-blue hover:bg-border/40'
+                }`}
+              >
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-brand-blue rounded-r-full" />
+                )}
+                <span className={`${isActive ? 'text-brand-blue' : 'text-muted'}`}>
+                  {s.icon}
+                </span>
+                <span className="text-[9px] uppercase tracking-widest leading-tight">{s.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto no-scrollbar px-8 py-7">
+          {/* Section title */}
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-brand-blue/10 flex items-center justify-center text-brand-blue">
+              {active.icon}
             </div>
-            <div>
-              <h2 className="text-sm font-black text-white uppercase tracking-widest leading-none">Referencia Técnica</h2>
-              <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest mt-0.5">APU Engine · Manual de operación</p>
-            </div>
+            <h3 className="text-sm font-bold text-brand-blue uppercase tracking-widest">{active.label}</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="flex flex-1 min-h-0">
+          {/* Steps */}
+          <ol className="space-y-4 mb-6">
+            {active.steps.map((step, i) => (
+              <li key={i} className="flex items-start gap-4">
+                <span className="w-6 h-6 rounded-full bg-brand-blue text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {i + 1}
+                </span>
+                <p className="text-[11px] text-muted-dark leading-relaxed pt-0.5">{step.text}</p>
+              </li>
+            ))}
+          </ol>
 
-          {/* Sidebar nav */}
-          <nav className="w-52 bg-[#f0f4f8] border-r border-slate-200 flex flex-col py-4 shrink-0 overflow-y-auto no-scrollbar">
-            {SECTIONS.map((s) => {
-              const isActive = s.id === activeId;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setActiveId(s.id)}
-                  className={`relative flex items-center gap-3 px-5 py-3 text-left transition-all ${
-                    isActive
-                      ? 'text-[#004071] font-black'
-                      : 'text-slate-500 font-bold hover:text-[#004071] hover:bg-slate-200/50'
-                  }`}
-                >
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-[#004071] rounded-r-full" />
-                  )}
-                  <span className={`${isActive ? 'text-[#004071]' : 'text-slate-400'}`}>
-                    {s.icon}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-widest leading-tight">{s.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto no-scrollbar px-8 py-7">
-            {/* Section title */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-[#004071]/10 flex items-center justify-center text-[#004071]">
-                {active.icon}
+          {/* Tip card */}
+          {active.tip && (
+            <div className="flex items-start gap-3 bg-brand-green/10 border-l-2 border-brand-green rounded-r-xl px-4 py-3">
+              <div className="w-4 h-4 rounded-full bg-brand-green flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-white text-[8px] font-bold">!</span>
               </div>
-              <h3 className="text-sm font-black text-[#004071] uppercase tracking-widest">{active.label}</h3>
+              <p className="text-[10px] text-muted-dark leading-relaxed">{active.tip}</p>
             </div>
-
-            {/* Steps */}
-            <ol className="space-y-4 mb-6">
-              {active.steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-4">
-                  <span className="w-6 h-6 rounded-full bg-[#004071] text-white text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <p className="text-[11px] text-slate-600 leading-relaxed pt-0.5">{step.text}</p>
-                </li>
-              ))}
-            </ol>
-
-            {/* Tip card */}
-            {active.tip && (
-              <div className="flex items-start gap-3 bg-[#88C13E]/10 border-l-2 border-[#88C13E] rounded-r-xl px-4 py-3">
-                <div className="w-4 h-4 rounded-full bg-[#88C13E] flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-white text-[8px] font-black">!</span>
-                </div>
-                <p className="text-[10px] text-slate-600 leading-relaxed">{active.tip}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-7 py-3 border-t border-slate-200 bg-slate-50 shrink-0">
-          <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest">HDG Engineering · {new Date().getFullYear()}</p>
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-[#004071] text-white text-[9px] font-black uppercase tracking-widest hover:bg-[#002D50] transition-all"
-          >
-            Cerrar
-          </button>
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-7 py-3 border-t border-border bg-sidebar shrink-0">
+        <p className="text-[8px] text-muted font-bold uppercase tracking-widest">HDG Engineering · {new Date().getFullYear()}</p>
+        <button
+          onClick={onClose}
+          className="px-5 py-2 rounded-xl bg-brand-blue text-white text-[9px] font-bold uppercase tracking-widest hover:bg-brand-blue-dark transition-all"
+        >
+          Cerrar
+        </button>
+      </div>
+    </Modal>
   );
 };
 
