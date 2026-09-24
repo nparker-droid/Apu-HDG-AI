@@ -60,32 +60,6 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
-          <div className="flex items-center gap-3 mb-2 text-muted">
-            <DollarSign className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Total Neto</span>
-          </div>
-          <p className="text-3xl font-bold text-brand-blue">{formatCLP(budgetData.totalNetoProyecto)}</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
-          <div className="flex items-center gap-3 mb-2 text-muted">
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">IVA (19%)</span>
-          </div>
-          <p className="text-3xl font-bold text-muted-dark">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</p>
-        </div>
-
-        <div className="bg-brand-green p-6 rounded-2xl shadow-sm text-white">
-          <div className="flex items-center gap-3 mb-2 opacity-80">
-            <PieChart className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Total Bruto</span>
-          </div>
-          <p className="text-3xl font-bold">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</p>
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
         <div className="p-8 border-b border-border bg-sidebar/50 flex justify-between items-center">
           <div>
@@ -176,6 +150,32 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
+          <div className="flex items-center gap-3 mb-2 text-muted">
+            <DollarSign className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Total Neto</span>
+          </div>
+          <p className="text-3xl font-bold text-brand-blue">{formatCLP(budgetData.totalNetoProyecto)}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
+          <div className="flex items-center gap-3 mb-2 text-muted">
+            <TrendingUp className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">IVA (19%)</span>
+          </div>
+          <p className="text-3xl font-bold text-muted-dark">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</p>
+        </div>
+
+        <div className="bg-brand-green p-6 rounded-2xl shadow-sm text-white">
+          <div className="flex items-center gap-3 mb-2 opacity-80">
+            <PieChart className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Total Bruto</span>
+          </div>
+          <p className="text-3xl font-bold">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</p>
         </div>
       </div>
     </div>

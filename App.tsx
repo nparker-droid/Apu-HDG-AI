@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Upload, Share2 } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Upload, Share2, FileText, Table } from 'lucide-react';
 import { useAppStore, STORAGE_ERROR_EVENT, getStorageUsage, STORAGE_QUOTA_BYTES } from './store/useAppStore';
 import ResourceSummary from './components/ResourceSummary';
 import ProjectSheet from './components/ProjectSheet';
@@ -15,6 +15,7 @@ import LibraryModal from './components/LibraryModal';
 import ProjectGeneralView from './components/ProjectGeneralView';
 import HelpModal from './components/HelpModal';
 import { exportProjectToExcel } from './services/excelExportService';
+import { exportProjectToPDF, exportBudgetToPDF } from './services/exportService';
 import { saveBlobWithPicker } from './services/fileSaveService';
 import { Project, APU, Chapter, ItemCategory } from './types';
 import { Toaster, toast } from 'sonner';
@@ -28,7 +29,7 @@ const safeUUID = () => crypto.randomUUID();
 
 const App: React.FC = () => {
   const {
-    projects, setProjects,
+    projects, setProjects, reorderProject,
     chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
@@ -347,6 +348,7 @@ const App: React.FC = () => {
       <Sidebar
         isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen}
         projects={projects} chapters={chapters} apus={apus}
+        reorderProject={reorderProject}
         reorderChapter={reorderChapter} deleteChapter={deleteChapter}
         currentProjectId={activeProjectId}
         setCurrentProjectId={(id) => {
@@ -406,19 +408,19 @@ const App: React.FC = () => {
                   <button
                     onClick={driveConnected ? undefined : handleDriveConnect}
                     disabled={driveStatus === 'syncing'}
-                    className={`flex items-center gap-1.5 text-[8px] font-bold px-3 py-2 rounded-xl uppercase tracking-widest transition-all disabled:opacity-60 select-none ${
+                    title={driveConnected ? 'Conectado a Google Drive' : 'Conectar Google Drive'}
+                    className={`relative p-2 rounded-xl transition-all disabled:opacity-60 select-none ${
                       driveConnected
                         ? 'bg-brand-blue/10 text-brand-blue cursor-default'
-                        : 'bg-sidebar text-muted hover:bg-brand-blue/10 hover:text-brand-blue cursor-pointer'
+                        : 'text-muted hover:bg-sidebar hover:text-brand-blue cursor-pointer'
                     }`}
                   >
                     {driveStatus === 'syncing'
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
                       : driveStatus === 'synced'
-                        ? <Check className="w-3 h-3 text-brand-green" />
-                        : <CloudUpload className="w-3 h-3" />}
-                    Drive
-                    {driveConnected && <span className="w-1.5 h-1.5 rounded-full bg-brand-green ml-0.5" />}
+                        ? <Check className="w-4 h-4 text-brand-green" />
+                        : <CloudUpload className="w-4 h-4" />}
+                    {driveConnected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-green" />}
                   </button>
 
                   {/* Hover card con acciones y ubicación */}
@@ -481,16 +483,31 @@ const App: React.FC = () => {
                 <button
                   onClick={handleManualSave}
                   disabled={saveStatus === 'saving'}
-                  className="flex items-center gap-2 text-[8px] font-bold px-4 py-2 rounded-xl bg-sidebar text-muted-dark hover:bg-border uppercase tracking-widest transition-all"
+                  title={saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all disabled:opacity-60"
                 >
-                  {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-brand-green" /> : <Save className="w-3 h-3" />}
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  {saveStatus === 'saving' ? <Loader2 className="w-4 h-4 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-4 h-4 text-brand-green" /> : <Save className="w-4 h-4" />}
                 </button>
                 <button
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
-                  className="flex items-center gap-2 text-[8px] font-bold text-white bg-brand-green px-4 py-2 rounded-xl hover:bg-brand-green-dark uppercase tracking-widest transition-all"
+                  title="Reporte Excel"
+                  className="p-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all"
                 >
-                  <Download className="w-3 h-3" /> Reporte Excel
+                  <Download className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => exportProjectToPDF(activeProject, chapters, apus)}
+                  title="APUs PDF"
+                  className="p-2 rounded-xl text-white bg-ink hover:opacity-90 transition-all"
+                >
+                  <FileText className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => exportBudgetToPDF(activeProject, chapters, apus)}
+                  title="Presupuesto PDF"
+                  className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all"
+                >
+                  <Table className="w-4 h-4" />
                 </button>
                 <QuickCalculator />
                 <button

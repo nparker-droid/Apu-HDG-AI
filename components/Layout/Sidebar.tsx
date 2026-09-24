@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { getZeroCostInfo } from '../../lib/apuCalculations';
-import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table, GripVertical } from 'lucide-react';
+import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Edit3, GripVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
-import { exportProjectToPDF, exportBudgetToPDF } from '../../services/exportService';
 import { formatMonthYear } from '../../lib/date';
 import ConfirmationModal from '../ui/ConfirmationModal';
 
@@ -30,6 +29,7 @@ interface SidebarProps {
     projects: Project[];
     chapters: Chapter[];
     apus: APU[];
+    reorderProject: (projectId: string, beforeProjectId: string | null) => void;
     reorderChapter: (chapterId: string, beforeChapterId: string | null) => void;
     deleteChapter: (id: string) => void;
     currentProjectId: string | null;
@@ -52,7 +52,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
     isOpen, setIsOpen,
-    projects, chapters, apus, reorderChapter, deleteChapter,
+    projects, chapters, apus, reorderProject, reorderChapter, deleteChapter,
     currentProjectId, setCurrentProjectId,
     currentApuId, setCurrentApuId,
     onNewProject, onEditProject, onNewChapter,
@@ -86,6 +86,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [draggedChapterId, setDraggedChapterId] = useState<string | null>(null);
     const [dragOverChapterId, setDragOverChapterId] = useState<string | null>(null);
     const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
+    const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+    const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
 
     const handleConfirmAction = () => {
         if (!confirmDelete) return;
@@ -148,10 +150,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
                 {visibleProjects.map(project => (
                     <div key={project.id} className="group/project space-y-1">
+                        {dragOverProjectId === project.id && draggedProjectId !== null && draggedProjectId !== project.id && (
+                            <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
+                        )}
                         <div
+                            draggable={!term}
+                            onDragStart={(e) => { setDraggedProjectId(project.id); e.dataTransfer.effectAllowed = 'move'; }}
+                            onDragEnd={() => { setDraggedProjectId(null); setDragOverProjectId(null); }}
+                            onDragOver={(e) => { e.preventDefault(); if (draggedProjectId && draggedProjectId !== project.id) setDragOverProjectId(project.id); }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                if (draggedProjectId && draggedProjectId !== project.id) reorderProject(draggedProjectId, project.id);
+                                setDraggedProjectId(null); setDragOverProjectId(null);
+                            }}
                             onClick={() => setCurrentProjectId(project.id)}
                             className={cn(
-                                "flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all",
+                                "flex items-center justify-between p-4 rounded-2xl transition-all select-none",
+                                !term && (draggedProjectId === project.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'),
                                 currentProjectId === project.id ? 'bg-brand-blue text-white' : 'hover:bg-sidebar text-muted-dark'
                             )}
                         >
@@ -185,16 +200,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 >
                                     <Trash2 className="w-3 h-3" />
                                 </button>
+                                {!term && <GripVertical className="w-3 h-3 opacity-40" title="Arrastrar para reordenar" />}
                             </div>
                         </div>
 
                         {currentProjectId === project.id && (
                             <div className="ml-5 pl-3 border-l-2 border-brand-blue/20 space-y-4 py-2 animate-in slide-in-from-left-2">
-                                <div className="grid grid-cols-2 gap-1 px-1">
-                                    <button onClick={() => exportProjectToPDF(project, chapters, apus)} className="bg-ink text-white text-[8px] font-bold p-2 rounded-lg flex items-center justify-center gap-1 uppercase hover:opacity-90 transition-all"><FileText className="w-3 h-3" /> APUs PDF</button>
-                                    <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="bg-brand-blue text-white text-[8px] font-bold p-2 rounded-lg flex items-center justify-center gap-1 uppercase hover:bg-brand-blue-dark transition-all"><Table className="w-3 h-3" /> Pres. PDF</button>
-                                </div>
-
                                 {chapters.filter(c => c.projectId === project.id && (!term || chapterMatchesSearch(c))).map(chapter => {
                                     const chapterApus = apus.filter(a => a.chapterId === chapter.id && (!term || matchesText(a.name) || matchesText(a.code)));
                                     return (
@@ -363,6 +374,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )}
                     </div>
                 ))}
+                {draggedProjectId && (
+                    <div
+                        onDragOver={(e) => { e.preventDefault(); setDragOverProjectId('__end__'); }}
+                        onDrop={(e) => { e.preventDefault(); reorderProject(draggedProjectId, null); setDraggedProjectId(null); setDragOverProjectId(null); }}
+                        className={cn("h-4 rounded-full mx-1 transition-colors", dragOverProjectId === '__end__' ? 'bg-brand-blue/20' : '')}
+                    />
+                )}
             </div>
 
             <ConfirmationModal

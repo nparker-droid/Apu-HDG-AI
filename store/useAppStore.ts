@@ -178,6 +178,19 @@ export const useAppStore = () => {
     });
   }, []);
 
+  /** Reordena un proyecto en la biblioteca, insertándolo antes de `beforeProjectId` (o al final si es null). */
+  const reorderProject = useCallback((projectId: string, beforeProjectId: string | null) => {
+    setProjects(prev => {
+      const project = prev.find(p => p.id === projectId);
+      if (!project || projectId === beforeProjectId) return prev;
+      const without = prev.filter(p => p.id !== projectId);
+      const insertIdx = beforeProjectId !== null ? without.findIndex(p => p.id === beforeProjectId) : -1;
+      const result = [...without];
+      result.splice(insertIdx !== -1 ? insertIdx : result.length, 0, project);
+      return result;
+    });
+  }, []);
+
   /** Reordena un capítulo dentro de su proyecto, insertándolo antes de `beforeChapterId` (o al final si es null). */
   const reorderChapter = useCallback((chapterId: string, beforeChapterId: string | null) => {
     setChapters(prev => {
@@ -288,7 +301,7 @@ export const useAppStore = () => {
 
   return {
     sheet, setSheet,
-    projects, setProjects,
+    projects, setProjects, reorderProject,
     chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
