@@ -403,6 +403,14 @@ const App: React.FC = () => {
                   </span>
                 )}
 
+                <label
+                  title="Importar proyecto (.json)"
+                  className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+
                 {/* Google Drive — botón único con hover card */}
                 <div className="relative group/drive">
                   <button
@@ -517,13 +525,6 @@ const App: React.FC = () => {
                 >
                   <BookOpen className="w-4 h-4" />
                 </button>
-                <label
-                  title="Importar proyecto (.json)"
-                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all cursor-pointer"
-                >
-                  <Upload className="w-4 h-4" />
-                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                </label>
                 <button
                   disabled={!activeProject}
                   onClick={() => activeProject && handleShareProject(activeProject)}
@@ -605,6 +606,13 @@ const App: React.FC = () => {
           <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700 relative">
             <div className="absolute top-4 right-4 flex items-center gap-2">
               {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
+              <label
+                title="Importar proyecto (.json)"
+                className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
               <button
                 onClick={() => setIsUserLibraryOpen(true)}
                 title="Biblioteca del usuario"
@@ -612,13 +620,6 @@ const App: React.FC = () => {
               >
                 <BookOpen className="w-4 h-4" />
               </button>
-              <label
-                title="Importar proyecto (.json)"
-                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all cursor-pointer"
-              >
-                <Upload className="w-4 h-4" />
-                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-              </label>
               <button
                 onClick={() => setIsHelpOpen(true)}
                 title="Manual de operación"
