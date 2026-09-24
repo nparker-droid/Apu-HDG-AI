@@ -339,7 +339,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             }}
                             onClick={() => setCurrentProjectId(project.id)}
                             className={cn(
-                                "relative flex items-center justify-between p-4 pr-5 rounded-2xl transition-all select-none",
+                                "relative flex items-center justify-between p-4 pr-7 rounded-2xl transition-all select-none",
                                 !term && (draggedProjectId === project.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'),
                                 currentProjectId === project.id ? 'bg-brand-blue text-white' : 'hover:bg-sidebar text-muted-dark'
                             )}
@@ -361,23 +361,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     {project.date && <span className="text-[7px] font-semibold opacity-50">{formatMonthYear(project.date)}</span>}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-0 opacity-0 group-hover/project:opacity-100 transition-opacity shrink-0">
-                                <button onClick={(e) => { e.stopPropagation(); onEditProject(project); }} title="Renombrar/Editar" className="p-0.5 hover:text-brand-green"><Edit3 className="w-2.5 h-2.5" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); }} title="Duplicar" className="p-0.5 hover:text-brand-green"><Copy className="w-2.5 h-2.5" /></button>
+                            <div className="flex items-center gap-2 opacity-0 group-hover/project:opacity-100 transition-opacity shrink-0">
+                                <button onClick={(e) => { e.stopPropagation(); onEditProject(project); }} title="Renombrar/Editar" className="p-1 hover:text-brand-green"><Edit3 className="w-3.5 h-3.5" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); }} title="Duplicar" className="p-1 hover:text-brand-green"><Copy className="w-3.5 h-3.5" /></button>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setConfirmDelete({ type: 'project', id: project.id, name: project.name });
                                     }}
                                     title="Eliminar Proyecto"
-                                    className="p-0.5 hover:text-status-red"
+                                    className="p-1 hover:text-status-red"
                                 >
-                                    <Trash2 className="w-2.5 h-2.5" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                             {!term && (
                                 <GripVertical
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 opacity-0 group-hover/project:opacity-30 transition-opacity pointer-events-none"
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-0 group-hover/project:opacity-30 transition-opacity pointer-events-none"
                                     title="Arrastrar para reordenar"
                                 />
                             )}

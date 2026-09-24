@@ -181,18 +181,18 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
       </div>
 
       <div className="sticky bottom-0 z-10 pt-3 pb-4 bg-white/95 backdrop-blur-sm border-t border-border shadow-[0_-6px_16px_rgba(0,0,0,0.06)]">
-        <div className="max-w-xs ml-auto space-y-1">
-          <div className="flex items-center justify-between gap-6 text-xs px-4">
+        <div className="max-w-sm ml-auto space-y-1.5">
+          <div className="flex items-center justify-between gap-6 text-sm px-4">
             <span className="text-muted font-semibold uppercase tracking-wide">Total Neto</span>
             <span className="font-bold text-ink font-mono">{formatCLP(budgetData.totalNetoProyecto)}</span>
           </div>
-          <div className="flex items-center justify-between gap-6 text-xs px-4">
+          <div className="flex items-center justify-between gap-6 text-sm px-4">
             <span className="text-muted font-semibold uppercase tracking-wide">IVA (19%)</span>
             <span className="font-bold text-muted-dark font-mono">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</span>
           </div>
-          <div className="flex items-center justify-between gap-6 bg-brand-green text-white px-4 py-2 rounded-xl mt-1.5">
-            <span className="text-sm font-bold uppercase tracking-wide">Total Bruto</span>
-            <span className="text-base font-bold font-mono">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</span>
+          <div className="flex items-center justify-between gap-6 bg-brand-green text-white px-4 py-2.5 rounded-xl mt-1.5">
+            <span className="text-base font-bold uppercase tracking-wide">Total Bruto</span>
+            <span className="text-lg font-bold font-mono">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</span>
           </div>
         </div>
       </div>
