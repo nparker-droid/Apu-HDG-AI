@@ -377,7 +377,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                             {!term && (
                                 <GripVertical
-                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-0 group-hover/project:opacity-30 transition-opacity pointer-events-none"
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-30 group-hover/project:opacity-60 transition-opacity"
                                     title="Arrastrar para reordenar"
                                 />
                             )}
