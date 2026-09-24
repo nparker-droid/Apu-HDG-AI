@@ -7,6 +7,7 @@ import QuickCalculator from './components/QuickCalculator';
 import ConfirmationModal from './components/ui/ConfirmationModal';
 import { normalizeApu } from './lib/apuCalculations';
 import { formatNumber } from './lib/number';
+import { getRootChapters, getSubchapters } from './lib/chapters';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
 import ProjectModal from './components/ProjectModal';
@@ -45,7 +46,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [chapterModalProjectId, setChapterModalProjectId] = useState<string | null>(null);
+  const [chapterModalContext, setChapterModalContext] = useState<{ projectId: string; parentChapterId?: string } | null>(null);
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [isUserLibraryOpen, setIsUserLibraryOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -70,12 +71,19 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!activeProjectId || chapters.length === 0) return;
 
-    const projectChapters = chapters.filter(c => c.projectId === activeProjectId);
+    const roots = getRootChapters(chapters, activeProjectId);
 
     const newChapters = chapters.map(ch => {
       if (ch.projectId !== activeProjectId) return ch;
-      const idx = projectChapters.findIndex(c => c.id === ch.id);
-      const newCode = (idx + 1).toString();
+      let newCode: string;
+      if (!ch.parentChapterId) {
+        newCode = (roots.findIndex(c => c.id === ch.id) + 1).toString();
+      } else {
+        const parentIdx = roots.findIndex(c => c.id === ch.parentChapterId);
+        if (parentIdx === -1) return ch; // padre no encontrado (dato corrupto) — no renumerar
+        const siblingIdx = getSubchapters(chapters, ch.parentChapterId).findIndex(s => s.id === ch.id);
+        newCode = `${parentIdx + 1}.${siblingIdx + 1}`;
+      }
       return ch.code !== newCode ? { ...ch, code: newCode } : ch;
     });
 
@@ -85,7 +93,9 @@ const App: React.FC = () => {
       if (!ch) return apu;
       const siblings = apus.filter(a => a.chapterId === apu.chapterId);
       const idx = siblings.findIndex(s => s.id === apu.id);
-      const newCode = `${ch.code}.${idx + 1}`;
+      // las partidas directas de un capítulo raíz se numeran después de sus subcapítulos
+      const offset = ch.parentChapterId ? 0 : getSubchapters(newChapters, ch.id).length;
+      const newCode = `${ch.code}.${offset + idx + 1}`;
       return apu.code !== newCode ? { ...apu, code: newCode } : apu;
     });
 
@@ -361,7 +371,8 @@ const App: React.FC = () => {
         setCurrentApuId={(id) => { if (id !== currentApuId) setCurrentApuId(id); }}
         onNewProject={() => { setEditingProject(null); setIsProjectModalOpen(true); }}
         onEditProject={(p) => { setEditingProject(p); setIsProjectModalOpen(true); }}
-        onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
+        onNewChapter={() => activeProjectId && setChapterModalContext({ projectId: activeProjectId })}
+        onNewSubchapter={(projectId, parentChapterId) => setChapterModalContext({ projectId, parentChapterId })}
         onLibraryOpen={setLibraryChapterId}
         onCreateApu={handleCreateApu}
         onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; const i = apus.findIndex(x => x.id === a.id); const next = [...apus]; next.splice(i + 1, 0, dup); setApus(next); }}
@@ -666,12 +677,13 @@ const App: React.FC = () => {
         />
       )}
 
-      {chapterModalProjectId && (
+      {chapterModalContext && (
         <ChapterModal
-          onClose={() => setChapterModalProjectId(null)}
+          isSubchapter={!!chapterModalContext.parentChapterId}
+          onClose={() => setChapterModalContext(null)}
           onSubmit={(name) => {
-            addChapter({ id: safeUUID(), projectId: activeProjectId!, code: '', name });
-            setChapterModalProjectId(null);
+            addChapter({ id: safeUUID(), projectId: chapterModalContext.projectId, code: '', name, parentChapterId: chapterModalContext.parentChapterId });
+            setChapterModalContext(null);
           }}
         />
       )}

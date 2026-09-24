@@ -108,19 +108,25 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
   if (!XLSX()) { console.error('XLSX no cargado'); return; }
   const wb = XLSX().utils.book_new();
   const used = new Set<string>(['presupuesto']);
-  const projectChapters = chapters.filter(c => c.projectId === project.id);
+  const projectChapters = chapters.filter(c => c.projectId === project.id && !c.parentChapterId);
 
   // 1) Hojas APU (primero, para conocer sus nombres y celda de P.U.)
   const apuSheets: { name: string; ws: any }[] = [];
   const puRef = new Map<string, { ref: string; pu: number }>();
+  const addApuSheet = (apu: APU, number: string) => {
+    const { ws, puCell, pu } = createApuWorksheet(apu, project, number);
+    const name = safeSheetName(`APU ${number}`, used);
+    apuSheets.push({ name, ws });
+    puRef.set(apu.id, { ref: `${quoteSheet(name)}!${puCell}`, pu });
+  };
   projectChapters.forEach((chap, cIdx) => {
-    apus.filter(a => a.chapterId === chap.id).forEach((apu, aIdx) => {
-      const number = `${cIdx + 1}.${aIdx + 1}`;
-      const { ws, puCell, pu } = createApuWorksheet(apu, project, number);
-      const name = safeSheetName(`APU ${number}`, used);
-      apuSheets.push({ name, ws });
-      puRef.set(apu.id, { ref: `${quoteSheet(name)}!${puCell}`, pu });
+    const chapterNumber = cIdx + 1;
+    const subchapters = chapters.filter(c => c.parentChapterId === chap.id);
+    subchapters.forEach((sub, sIdx) => {
+      const subNumber = `${chapterNumber}.${sIdx + 1}`;
+      apus.filter(a => a.chapterId === sub.id).forEach((apu, aIdx) => addApuSheet(apu, `${subNumber}.${aIdx + 1}`));
     });
+    apus.filter(a => a.chapterId === chap.id).forEach((apu, aIdx) => addApuSheet(apu, `${chapterNumber}.${subchapters.length + aIdx + 1}`));
   });
 
   // 2) Presupuesto
@@ -137,20 +143,44 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
   projectChapters.forEach((chap, cIdx) => {
     const n = cIdx + 1;
     rows.push([String(n), (chap.name || '').toUpperCase()]);
-    const chapApus = apus.filter(a => a.chapterId === chap.id);
-    const first = R();
+    const subchapters = chapters.filter(c => c.parentChapterId === chap.id);
+    const subtotalCellRefs: string[] = [];
     let chapSum = 0;
-    chapApus.forEach((apu, aIdx) => {
+
+    subchapters.forEach((sub, sIdx) => {
+      const subNumber = `${n}.${sIdx + 1}`;
+      const subApus = apus.filter(a => a.chapterId === sub.id);
+      if (subApus.length === 0) return;
+      rows.push(['', `  ${subNumber} ${(sub.name || '').toUpperCase()}`]);
+      const subApuCellRefs: string[] = [];
+      let subSum = 0;
+      subApus.forEach((apu, aIdx) => {
+        const r = R();
+        const ref = puRef.get(apu.id)!;
+        const qty = Number(apu.quantity) || 0;
+        const total = ref.pu * qty;
+        subSum += total; chapSum += total;
+        rows.push([`${subNumber}.${aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
+        subApuCellRefs.push(`F${r}`);
+      });
+      const rSubSub = R();
+      rows.push(['', `SUBTOTAL SUBCAPÍTULO ${subNumber}`, '', '', '', fx(subApuCellRefs.length ? subApuCellRefs.join('+') : '0', subSum)]);
+      subtotalCellRefs.push(`F${rSubSub}`);
+    });
+
+    const directApus = apus.filter(a => a.chapterId === chap.id);
+    directApus.forEach((apu, aIdx) => {
       const r = R();
       const ref = puRef.get(apu.id)!;
       const qty = Number(apu.quantity) || 0;
       const total = ref.pu * qty;
       chapSum += total;
-      rows.push([`${n}.${aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
+      rows.push([`${n}.${subchapters.length + aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
+      subtotalCellRefs.push(`F${r}`);
     });
-    const last = R() - 1;
+
     const rSub = R();
-    rows.push(['', `SUBTOTAL CAPÍTULO ${n}`, '', '', '', fx(chapApus.length ? `SUM(F${first}:F${last})` : '0', chapSum)]);
+    rows.push(['', `SUBTOTAL CAPÍTULO ${n}`, '', '', '', fx(subtotalCellRefs.length ? subtotalCellRefs.join('+') : '0', chapSum)]);
     chapterTotals.push(`F${rSub}`);
     grand += chapSum;
     rows.push([]);

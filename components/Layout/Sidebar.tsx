@@ -4,6 +4,7 @@ import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Ed
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
 import { formatMonthYear } from '../../lib/date';
+import { getRootChapters, getSubchapters } from '../../lib/chapters';
 import ConfirmationModal from '../ui/ConfirmationModal';
 
 const normKey = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -39,6 +40,7 @@ interface SidebarProps {
     onNewProject: () => void;
     onEditProject: (project: Project) => void;
     onNewChapter: (projectId: string) => void;
+    onNewSubchapter: (projectId: string, parentChapterId: string) => void;
     onLibraryOpen: (chapterId: string) => void;
     onCreateApu: (projectId: string, chapterId: string) => void;
     onDuplicateApu: (apu: any) => void;
@@ -55,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     projects, chapters, apus, reorderProject, reorderChapter, deleteChapter,
     currentProjectId, setCurrentProjectId,
     currentApuId, setCurrentApuId,
-    onNewProject, onEditProject, onNewChapter,
+    onNewProject, onEditProject, onNewChapter, onNewSubchapter,
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onDeleteProject, onDuplicateProject,
     moveApu, moveApuToChapter, onRenameChapter
@@ -64,8 +66,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     const term = normKey(search);
     const matchesText = (s: string | undefined) => !term || normKey(s || '').includes(term);
 
-    const chapterMatchesSearch = (chapter: Chapter) =>
-        matchesText(chapter.name) || apus.some(a => a.chapterId === chapter.id && (matchesText(a.name) || matchesText(a.code)));
+    const chapterMatchesSearch = (chapter: Chapter): boolean =>
+        matchesText(chapter.name) ||
+        apus.some(a => a.chapterId === chapter.id && (matchesText(a.name) || matchesText(a.code))) ||
+        (!chapter.parentChapterId && getSubchapters(chapters, chapter.id).some(sub => chapterMatchesSearch(sub)));
 
     const visibleProjects = useMemo(() => projects.filter(project =>
         !term ||
@@ -104,6 +108,176 @@ const Sidebar: React.FC<SidebarProps> = ({
                 break;
         }
         setConfirmDelete(null);
+    };
+
+    const renderChapterBlock = (project: Project, chapter: Chapter, isSubchapter: boolean, extraContent?: React.ReactNode) => {
+        const chapterApus = apus.filter(a => a.chapterId === chapter.id && (!term || matchesText(a.name) || matchesText(a.code)));
+        return (
+            <div key={chapter.id} className={cn("space-y-1 relative", isSubchapter && "ml-4 pl-2 border-l-2 border-brand-blue/10")}>
+                {dragOverChapterId === chapter.id && draggedChapterId !== null && draggedChapterId !== chapter.id && (
+                    <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
+                )}
+                <div
+                    draggable
+                    onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); }}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id); }}
+                    onDrop={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        if (draggedChapterId && draggedChapterId !== chapter.id) reorderChapter(draggedChapterId, chapter.id);
+                        setDraggedChapterId(null); setDragOverChapterId(null);
+                    }}
+                    className={cn(
+                        "flex flex-col p-2 rounded-xl space-y-2 group/chapter select-none transition-opacity",
+                        isSubchapter ? "bg-brand-blue/[0.03] border border-brand-blue/10" : "bg-brand-blue/[0.06] border border-brand-blue/15",
+                        draggedChapterId === chapter.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'
+                    )}
+                >
+                    <div className="flex items-center justify-between text-[9px] font-bold text-brand-blue uppercase tracking-widest">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setCollapsedChapters(prev => ({ ...prev, [chapter.id]: !prev[chapter.id] })); }}
+                            className="p-0.5 shrink-0 text-brand-blue/50 hover:text-brand-blue"
+                            title={collapsedChapters[chapter.id] ? 'Expandir capítulo' : 'Contraer capítulo'}
+                        >
+                            <ChevronRight className={cn("w-3 h-3 transition-transform", !collapsedChapters[chapter.id] && 'rotate-90')} />
+                        </button>
+                        {editingChapterId === chapter.id ? (
+                            <input
+                                autoFocus
+                                value={editingChapterName}
+                                onChange={e => setEditingChapterName(e.target.value)}
+                                onBlur={() => {
+                                    if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim());
+                                    setEditingChapterId(null);
+                                }}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') { if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim()); setEditingChapterId(null); }
+                                    if (e.key === 'Escape') setEditingChapterId(null);
+                                }}
+                                className="flex-1 text-[9px] font-bold text-muted-dark bg-sidebar border border-brand-blue rounded px-1.5 py-0.5 outline-none uppercase tracking-widest min-w-0"
+                            />
+                        ) : (
+                            <span className="truncate pr-1 flex-1">{chapter.code}. {chapter.name}</span>
+                        )}
+                        <div className="flex items-center gap-1 opacity-0 group-hover/chapter:opacity-100 transition-opacity shrink-0">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); }}
+                                className="text-muted-light hover:text-brand-blue p-0.5"
+                                title="Renombrar capítulo"
+                            >
+                                <Edit3 className="w-3 h-3" />
+                            </button>
+                            <GripVertical className="w-3 h-3 text-brand-blue/30" title="Arrastrar para reordenar" />
+                            <button
+                                onClick={() => setChapterActionMenu(prev => prev?.chapterId === chapter.id ? null : { projectId: project.id, chapterId: chapter.id })}
+                                className="text-brand-blue hover:text-brand-green p-0.5"
+                                title="Agregar partida"
+                            >
+                                <Plus className="w-3 h-3" />
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDelete({ type: 'chapter', id: chapter.id, name: chapter.name });
+                                }}
+                                className="text-muted-light hover:text-status-red p-0.5"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {chapterActionMenu?.chapterId === chapter.id && (
+                    <div className="absolute right-3 top-8 z-30 w-44 bg-white border border-border rounded-xl shadow-sm p-1.5 animate-in fade-in zoom-in-95">
+                        <button
+                            onClick={() => {
+                                onCreateApu(chapterActionMenu.projectId, chapterActionMenu.chapterId);
+                                setChapterActionMenu(null);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-brand-blue hover:bg-sidebar"
+                        >
+                            APU nuevo
+                        </button>
+                        <button
+                            onClick={() => {
+                                onLibraryOpen(chapterActionMenu.chapterId);
+                                setChapterActionMenu(null);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-brand-green hover:bg-sidebar"
+                        >
+                            Desde biblioteca
+                        </button>
+                        {!isSubchapter && (
+                            <button
+                                onClick={() => {
+                                    onNewSubchapter(chapterActionMenu.projectId, chapterActionMenu.chapterId);
+                                    setChapterActionMenu(null);
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar"
+                            >
+                                + Subcapítulo
+                            </button>
+                        )}
+                    </div>
+                )}
+                {extraContent}
+                <div
+                    className="space-y-0.5"
+                    onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
+                    onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
+                >
+                    {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
+                        <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
+                            {chapterApus.length} partida(s) — contraído
+                        </div>
+                    )}
+                    {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
+                        <div key={apu.id}>
+                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
+                                <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
+                            )}
+                            <div
+                                draggable
+                                onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
+                                onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
+                                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
+                                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId && draggedApuId !== apu.id) { moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); } }}
+                                onClick={() => setCurrentApuId(apu.id)}
+                                className={cn(
+                                    "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
+                                    draggedApuId === apu.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
+                                    currentApuId === apu.id ? 'bg-brand-green text-white' : 'hover:bg-sidebar text-muted-dark'
+                                )}
+                            >
+                                <span className="pr-2 font-semibold whitespace-normal break-words leading-tight">
+                                    {(() => { const pr = projects.find(p => p.id === apu.projectId); return pr && getZeroCostInfo(apu, pr).isZero ? <span title="Costos en $0 — falta completar" className="inline-block w-1.5 h-1.5 rounded-full bg-status-red mr-1.5 align-middle" /> : null; })()}
+                                    {apu.flagged && <span title="Partida marcada" className="inline-block w-1.5 h-1.5 rounded-full bg-status-amber mr-1.5 align-middle" />}
+                                    {apu.code} {apu.name}</span>
+                                <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
+                                    <div className="flex flex-col mr-1">
+                                        <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                    </div>
+                                    <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-brand-blue"><Copy className="w-3 h-3" /></button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
+                                        }}
+                                        className="p-1 hover:text-status-red"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {dragOver?.chapterId === chapter.id && dragOver?.apuId === null && draggedApuId !== null && (
+                        <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
+                    )}
+                </div>
+            </div>
+        );
     };
 
     return (
@@ -206,161 +380,15 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                         {currentProjectId === project.id && (
                             <div className="ml-5 pl-3 border-l-2 border-brand-blue/20 space-y-4 py-2 animate-in slide-in-from-left-2">
-                                {chapters.filter(c => c.projectId === project.id && (!term || chapterMatchesSearch(c))).map(chapter => {
-                                    const chapterApus = apus.filter(a => a.chapterId === chapter.id && (!term || matchesText(a.name) || matchesText(a.code)));
-                                    return (
-                                    <div key={chapter.id} className="space-y-1 relative">
-                                        {dragOverChapterId === chapter.id && draggedChapterId !== null && draggedChapterId !== chapter.id && (
-                                            <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
-                                        )}
-                                        <div
-                                            draggable
-                                            onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
-                                            onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); }}
-                                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id); }}
-                                            onDrop={(e) => {
-                                                e.preventDefault(); e.stopPropagation();
-                                                if (draggedChapterId && draggedChapterId !== chapter.id) reorderChapter(draggedChapterId, chapter.id);
-                                                setDraggedChapterId(null); setDragOverChapterId(null);
-                                            }}
-                                            className={cn(
-                                                "flex flex-col p-2 bg-brand-blue/[0.06] border border-brand-blue/15 rounded-xl space-y-2 group/chapter select-none transition-opacity",
-                                                draggedChapterId === chapter.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'
-                                            )}
-                                        >
-                                            <div className="flex items-center justify-between text-[9px] font-bold text-brand-blue uppercase tracking-widest">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setCollapsedChapters(prev => ({ ...prev, [chapter.id]: !prev[chapter.id] })); }}
-                                                    className="p-0.5 shrink-0 text-brand-blue/50 hover:text-brand-blue"
-                                                    title={collapsedChapters[chapter.id] ? 'Expandir capítulo' : 'Contraer capítulo'}
-                                                >
-                                                    <ChevronRight className={cn("w-3 h-3 transition-transform", !collapsedChapters[chapter.id] && 'rotate-90')} />
-                                                </button>
-                                                {editingChapterId === chapter.id ? (
-                                                    <input
-                                                        autoFocus
-                                                        value={editingChapterName}
-                                                        onChange={e => setEditingChapterName(e.target.value)}
-                                                        onBlur={() => {
-                                                            if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim());
-                                                            setEditingChapterId(null);
-                                                        }}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter') { if (editingChapterName.trim()) onRenameChapter(chapter.id, editingChapterName.trim()); setEditingChapterId(null); }
-                                                            if (e.key === 'Escape') setEditingChapterId(null);
-                                                        }}
-                                                        className="flex-1 text-[9px] font-bold text-muted-dark bg-sidebar border border-brand-blue rounded px-1.5 py-0.5 outline-none uppercase tracking-widest min-w-0"
-                                                    />
-                                                ) : (
-                                                    <span className="truncate pr-1 flex-1">{chapter.code}. {chapter.name}</span>
-                                                )}
-                                                <div className="flex items-center gap-1 opacity-0 group-hover/chapter:opacity-100 transition-opacity shrink-0">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); }}
-                                                        className="text-muted-light hover:text-brand-blue p-0.5"
-                                                        title="Renombrar capítulo"
-                                                    >
-                                                        <Edit3 className="w-3 h-3" />
-                                                    </button>
-                                                    <GripVertical className="w-3 h-3 text-brand-blue/30" title="Arrastrar para reordenar" />
-                                                    <button
-                                                        onClick={() => setChapterActionMenu(prev => prev?.chapterId === chapter.id ? null : { projectId: project.id, chapterId: chapter.id })}
-                                                        className="text-brand-blue hover:text-brand-green p-0.5"
-                                                        title="Agregar partida"
-                                                    >
-                                                        <Plus className="w-3 h-3" />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setConfirmDelete({ type: 'chapter', id: chapter.id, name: chapter.name });
-                                                        }}
-                                                        className="text-muted-light hover:text-status-red p-0.5"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {chapterActionMenu?.chapterId === chapter.id && (
-                                            <div className="absolute right-3 top-8 z-30 w-44 bg-white border border-border rounded-xl shadow-sm p-1.5 animate-in fade-in zoom-in-95">
-                                                <button
-                                                    onClick={() => {
-                                                        onCreateApu(chapterActionMenu.projectId, chapterActionMenu.chapterId);
-                                                        setChapterActionMenu(null);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-brand-blue hover:bg-sidebar"
-                                                >
-                                                    APU nuevo
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        onLibraryOpen(chapterActionMenu.chapterId);
-                                                        setChapterActionMenu(null);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-brand-green hover:bg-sidebar"
-                                                >
-                                                    Desde biblioteca
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div
-                                            className="space-y-0.5"
-                                            onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
-                                            onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
-                                        >
-                                            {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
-                                                <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
-                                                    {chapterApus.length} partida(s) — contraído
-                                                </div>
-                                            )}
-                                            {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
-                                                <div key={apu.id}>
-                                                    {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
-                                                        <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
-                                                    )}
-                                                    <div
-                                                        draggable
-                                                        onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
-                                                        onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
-                                                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
-                                                        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId && draggedApuId !== apu.id) { moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); } }}
-                                                        onClick={() => setCurrentApuId(apu.id)}
-                                                        className={cn(
-                                                            "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
-                                                            draggedApuId === apu.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
-                                                            currentApuId === apu.id ? 'bg-brand-green text-white' : 'hover:bg-sidebar text-muted-dark'
-                                                        )}
-                                                    >
-                                                        <span className="pr-2 font-semibold whitespace-normal break-words leading-tight">
-                                                            {(() => { const pr = projects.find(p => p.id === apu.projectId); return pr && getZeroCostInfo(apu, pr).isZero ? <span title="Costos en $0 — falta completar" className="inline-block w-1.5 h-1.5 rounded-full bg-status-red mr-1.5 align-middle" /> : null; })()}
-                                                            {apu.flagged && <span title="Partida marcada" className="inline-block w-1.5 h-1.5 rounded-full bg-status-amber mr-1.5 align-middle" />}
-                                                            {apu.code} {apu.name}</span>
-                                                        <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
-                                                            <div className="flex flex-col mr-1">
-                                                                <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
-                                                                <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
-                                                            </div>
-                                                            <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-brand-blue"><Copy className="w-3 h-3" /></button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
-                                                                }}
-                                                                className="p-1 hover:text-status-red"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                {getRootChapters(chapters, project.id).filter(c => !term || chapterMatchesSearch(c)).map(chapter => {
+                                    const subchapterContent = getSubchapters(chapters, chapter.id).filter(s => !term || chapterMatchesSearch(s)).length > 0 && (
+                                        <div className="space-y-1">
+                                            {getSubchapters(chapters, chapter.id).filter(s => !term || chapterMatchesSearch(s)).map(sub => (
+                                                <div key={sub.id}>{renderChapterBlock(project, sub, true)}</div>
                                             ))}
-                                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === null && draggedApuId !== null && (
-                                                <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
-                                            )}
                                         </div>
-                                    </div>
                                     );
+                                    return <div key={chapter.id}>{renderChapterBlock(project, chapter, false, subchapterContent)}</div>;
                                 })}
                                 {draggedChapterId && (
                                     <div

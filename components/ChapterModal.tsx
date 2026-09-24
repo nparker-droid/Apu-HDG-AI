@@ -5,24 +5,26 @@ import { Modal, ModalHeader } from './ui/Modal';
 interface ChapterModalProps {
   onClose: () => void;
   onSubmit: (name: string) => void;
+  isSubchapter?: boolean;
 }
 
-const ChapterModal: React.FC<ChapterModalProps> = ({ onClose, onSubmit }) => {
+const ChapterModal: React.FC<ChapterModalProps> = ({ onClose, onSubmit, isSubchapter }) => {
   const [name, setName] = useState('');
+  const label = isSubchapter ? 'Subcapítulo' : 'Capítulo';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return alert('El nombre del capítulo es obligatorio');
+    if (!name.trim()) return alert(`El nombre del ${label.toLowerCase()} es obligatorio`);
     onSubmit(name);
   };
 
   return (
     <Modal onClose={onClose} maxWidth="max-w-md">
-      <ModalHeader icon={<Layers className="w-5 h-5" />} title="Nuevo Capítulo" onClose={onClose} />
+      <ModalHeader icon={<Layers className="w-5 h-5" />} title={`Nuevo ${label}`} onClose={onClose} />
 
       <form onSubmit={handleSubmit} className="p-6 space-y-4">
         <div>
-          <label className="block text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Nombre del Capítulo</label>
+          <label className="block text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Nombre del {label}</label>
           <input
             type="text"
             autoFocus
@@ -40,7 +42,7 @@ const ChapterModal: React.FC<ChapterModalProps> = ({ onClose, onSubmit }) => {
             className="w-full bg-brand-blue hover:bg-brand-blue-dark text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
-            Guardar Capítulo
+            Guardar {label}
           </button>
         </div>
       </form>

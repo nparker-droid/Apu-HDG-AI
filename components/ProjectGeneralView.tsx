@@ -4,6 +4,7 @@ import { Project, Chapter, APU } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
 import { calculateApuTotals, getZeroCostInfo } from '../lib/apuCalculations';
 import { formatNumber } from '../lib/number';
+import { getRootChapters, getSubchapters } from '../lib/chapters';
 
 interface ProjectGeneralViewProps {
   project: Project;
@@ -19,21 +20,29 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
 
   const budgetData = useMemo(() => {
     let totalNetoProyecto = 0;
-    const chaptersWithTotals = chapters
-      .filter(c => c.projectId === project.id)
-      .map(chapter => {
-        const chapterApus = apus
-          .filter(a => a.chapterId === chapter.id)
-          .map(apu => {
-            const { precioUnitarioNeto } = calculateApuTotals(apu, project);
-            const subtotal = precioUnitarioNeto * (Number(apu.quantity) || 0);
-            return { ...apu, displayPU: precioUnitarioNeto, subtotal };
-          });
+    const withStats = (apu: APU, number: string) => {
+      const { precioUnitarioNeto } = calculateApuTotals(apu, project);
+      const subtotal = precioUnitarioNeto * (Number(apu.quantity) || 0);
+      return { ...apu, number, displayPU: precioUnitarioNeto, subtotal };
+    };
 
-        const totalChapter = chapterApus.reduce((s, a) => s + a.subtotal, 0);
-        totalNetoProyecto += totalChapter;
-        return { ...chapter, apus: chapterApus, totalChapter };
+    const chaptersWithTotals = getRootChapters(chapters, project.id).map((chapter, cIdx) => {
+      const chapterNumber = String(cIdx + 1);
+
+      const subchapters = getSubchapters(chapters, chapter.id).map((sub, sIdx) => {
+        const subNumber = `${chapterNumber}.${sIdx + 1}`;
+        const subApus = apus.filter(a => a.chapterId === sub.id).map((apu, aIdx) => withStats(apu, `${subNumber}.${aIdx + 1}`));
+        const totalChapter = subApus.reduce((s, a) => s + a.subtotal, 0);
+        return { ...sub, number: subNumber, apus: subApus, totalChapter };
       });
+
+      const directApus = apus.filter(a => a.chapterId === chapter.id)
+        .map((apu, aIdx) => withStats(apu, `${chapterNumber}.${subchapters.length + aIdx + 1}`));
+
+      const totalChapter = directApus.reduce((s, a) => s + a.subtotal, 0) + subchapters.reduce((s, sub) => s + sub.totalChapter, 0);
+      totalNetoProyecto += totalChapter;
+      return { ...chapter, number: chapterNumber, subchapters, directApus, totalChapter };
+    });
 
     return { chaptersWithTotals, totalNetoProyecto };
   }, [project, chapters, apus]);
@@ -48,11 +57,6 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   };
 
   const formatQuantity = (val: any) => formatNumber(Number(val) || 0, 2, 3);
-
-  const getApuStats = (activeApu: APU) => {
-    const { precioUnitarioNeto } = calculateApuTotals(activeApu, project);
-    return { displayPU: precioUnitarioNeto, subtotal: precioUnitarioNeto * activeApu.quantity };
-  };
 
   const projectApus = apus.filter(a => a.projectId === project.id);
   const flaggedCount = projectApus.filter(a => a.flagged).length;
@@ -88,66 +92,89 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
               </tr>
             </thead>
             <tbody>
-              {budgetData.chaptersWithTotals.map((chapter, cIdx) => (
-                <React.Fragment key={chapter.id}>
-                  <tr className="bg-sidebar">
-                    <td className="pl-4 pr-0 py-3"></td>
-                    <td className="px-8 py-3 font-bold text-brand-blue text-xs">
-                      <div className="flex items-center gap-2">
-                        <span>{cIdx + 1}</span>
-                        <div className="flex flex-col">
-                          <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'up'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronUp className="w-3 h-3" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'down'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronDown className="w-3 h-3" /></button>
-                        </div>
-                      </div>
-                    </td>
-                    <td colSpan={4} className="px-8 py-3 font-bold text-brand-blue text-xs uppercase">{chapter.name}</td>
-                    <td className="px-8 py-3 text-right font-bold text-brand-blue text-xs">{formatCLP(chapter.totalChapter)}</td>
-                  </tr>
-
-                  {chapter.apus.map((apu, aIdx) => {
-                    const { displayPU, subtotal } = getApuStats(apu);
-                    const zero = getZeroCostInfo(apu, project);
-                    return (
-                      <tr key={apu.id} className="border-b border-border hover:bg-sidebar/40 transition-colors group/row">
-                        <td className="pl-4 pr-0 py-3 align-middle">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => onToggleFlag(apu.id)}
-                              title={apu.flagged ? 'Marcada como pendiente — clic para quitar' : 'Marcar partida (pendiente / revisar)'}
-                              className={`w-3 h-3 rounded-full border transition-all ${apu.flagged
-                                ? 'bg-status-amber border-status-amber shadow-[0_0_0_3px_rgba(209,154,61,0.2)]'
-                                : 'bg-transparent border-border opacity-40 group-hover/row:opacity-100 hover:border-status-amber'}`}
+              {budgetData.chaptersWithTotals.map(chapter => {
+                const renderApuRow = (apu: typeof chapter.directApus[number]) => {
+                  const zero = getZeroCostInfo(apu, project);
+                  return (
+                    <tr key={apu.id} className="border-b border-border hover:bg-sidebar/40 transition-colors group/row">
+                      <td className="pl-4 pr-0 py-3 align-middle">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => onToggleFlag(apu.id)}
+                            title={apu.flagged ? 'Marcada como pendiente — clic para quitar' : 'Marcar partida (pendiente / revisar)'}
+                            className={`w-3 h-3 rounded-full border transition-all ${apu.flagged
+                              ? 'bg-status-amber border-status-amber shadow-[0_0_0_3px_rgba(209,154,61,0.2)]'
+                              : 'bg-transparent border-border opacity-40 group-hover/row:opacity-100 hover:border-status-amber'}`}
+                          />
+                          {zero.isZero && (
+                            <span
+                              title={apu.displayPU > 0 ? `${zero.zeroItems} recurso(s) con costo $0 — falta completar` : 'Precio unitario en $0 — falta completar'}
+                              className="w-2 h-2 rounded-full bg-status-red"
                             />
-                            {zero.isZero && (
-                              <span
-                                title={displayPU > 0 ? `${zero.zeroItems} recurso(s) con costo $0 — falta completar` : 'Precio unitario en $0 — falta completar'}
-                                className="w-2 h-2 rounded-full bg-status-red"
-                              />
-                            )}
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-3 text-[10px] text-muted font-medium">
+                        <div className="flex items-center gap-2 font-mono">
+                          <span>{apu.number}</span>
+                          <div className="flex flex-col">
+                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronDown className="w-3 h-3" /></button>
                           </div>
-                        </td>
-                        <td className="px-8 py-3 text-[10px] text-muted font-medium">
-                          <div className="flex items-center gap-2 font-mono">
-                            <span>{cIdx + 1}.{aIdx + 1}</span>
-                            <div className="flex flex-col">
-                              <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronUp className="w-3 h-3" /></button>
-                              <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronDown className="w-3 h-3" /></button>
+                        </div>
+                      </td>
+                      <td className="px-8 py-3 text-xs text-muted-dark font-medium whitespace-normal break-words min-w-[18rem]">
+                        <button onClick={() => onOpenApu(apu.id)} className="text-left hover:text-brand-blue hover:underline underline-offset-2">{apu.name}</button>
+                      </td>
+                      <td className="px-8 py-3 text-[10px] text-center text-muted-dark">{apu.unit}</td>
+                      <td className="px-8 py-3 text-[10px] text-center text-muted font-mono">{formatQuantity(apu.quantity)}</td>
+                      <td className="px-8 py-3 text-[10px] text-right text-muted font-mono">{formatCLP(apu.displayPU)}</td>
+                      <td className="px-8 py-3 text-xs text-right font-bold text-ink font-mono">{formatCLP(apu.subtotal)}</td>
+                    </tr>
+                  );
+                };
+
+                return (
+                  <React.Fragment key={chapter.id}>
+                    <tr className="bg-sidebar">
+                      <td className="pl-4 pr-0 py-3"></td>
+                      <td className="px-8 py-3 font-bold text-brand-blue text-xs">
+                        <div className="flex items-center gap-2">
+                          <span>{chapter.number}</span>
+                          <div className="flex flex-col">
+                            <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'up'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); moveChapter(chapter.id, 'down'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronDown className="w-3 h-3" /></button>
+                          </div>
+                        </div>
+                      </td>
+                      <td colSpan={4} className="px-8 py-3 font-bold text-brand-blue text-xs uppercase">{chapter.name}</td>
+                      <td className="px-8 py-3 text-right font-bold text-brand-blue text-xs">{formatCLP(chapter.totalChapter)}</td>
+                    </tr>
+
+                    {chapter.subchapters.map(sub => (
+                      <React.Fragment key={sub.id}>
+                        <tr className="bg-sidebar/50">
+                          <td className="pl-4 pr-0 py-2"></td>
+                          <td className="pl-12 pr-8 py-2 font-bold text-brand-blue/80 text-[11px]">
+                            <div className="flex items-center gap-2">
+                              <span>{sub.number}</span>
+                              <div className="flex flex-col">
+                                <button onClick={(e) => { e.stopPropagation(); moveChapter(sub.id, 'up'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); moveChapter(sub.id, 'down'); }} className="p-1 rounded hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"><ChevronDown className="w-3 h-3" /></button>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-8 py-3 text-xs text-muted-dark font-medium whitespace-normal break-words min-w-[18rem]">
-                          <button onClick={() => onOpenApu(apu.id)} className="text-left hover:text-brand-blue hover:underline underline-offset-2">{apu.name}</button>
-                        </td>
-                        <td className="px-8 py-3 text-[10px] text-center text-muted-dark">{apu.unit}</td>
-                        <td className="px-8 py-3 text-[10px] text-center text-muted font-mono">{formatQuantity(apu.quantity)}</td>
-                        <td className="px-8 py-3 text-[10px] text-right text-muted font-mono">{formatCLP(displayPU)}</td>
-                        <td className="px-8 py-3 text-xs text-right font-bold text-ink font-mono">{formatCLP(subtotal)}</td>
-                      </tr>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                          </td>
+                          <td colSpan={4} className="px-8 py-2 font-bold text-brand-blue/80 text-[11px] uppercase">{sub.name}</td>
+                          <td className="px-8 py-2 text-right font-bold text-brand-blue/80 text-[11px]">{formatCLP(sub.totalChapter)}</td>
+                        </tr>
+                        {sub.apus.map(apu => renderApuRow(apu))}
+                      </React.Fragment>
+                    ))}
+
+                    {chapter.directApus.map(apu => renderApuRow(apu))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

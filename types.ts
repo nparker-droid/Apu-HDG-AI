@@ -46,6 +46,8 @@ export interface Chapter {
   projectId: string;
   code: string;
   name: string;
+  /** Capítulo padre — ausente/undefined = capítulo raíz. Un capítulo con parentChapterId no puede tener hijos (un solo nivel). */
+  parentChapterId?: string;
 }
 
 export interface Project {
