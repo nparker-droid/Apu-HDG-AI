@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { getZeroCostInfo } from '../../lib/apuCalculations';
-import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Edit3, GripVertical } from 'lucide-react';
+import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Edit3, GripVertical, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
 import { formatMonthYear } from '../../lib/date';
@@ -83,6 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         name: string;
     } | null>(null);
     const [chapterActionMenu, setChapterActionMenu] = useState<{ projectId: string; chapterId: string } | null>(null);
+    const [projectActionMenu, setProjectActionMenu] = useState<string | null>(null);
     const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
     const [editingChapterName, setEditingChapterName] = useState('');
     const [draggedApuId, setDraggedApuId] = useState<string | null>(null);
@@ -323,7 +324,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <p className="text-center text-[10px] text-muted italic py-6">Sin resultados para "{search}"</p>
                 )}
                 {visibleProjects.map(project => (
-                    <div key={project.id} className="group/project space-y-1">
+                    <div key={project.id} className="group/project space-y-1 relative">
                         {dragOverProjectId === project.id && draggedProjectId !== null && draggedProjectId !== project.id && (
                             <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
                         )}
@@ -338,8 +339,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 setDraggedProjectId(null); setDragOverProjectId(null);
                             }}
                             onClick={() => setCurrentProjectId(project.id)}
+                            title={!term ? 'Arrastrar para reordenar' : undefined}
                             className={cn(
-                                "relative flex items-center justify-between p-4 pr-7 rounded-2xl transition-all select-none",
+                                "flex items-center justify-between p-4 rounded-2xl transition-all select-none",
                                 !term && (draggedProjectId === project.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab'),
                                 currentProjectId === project.id ? 'bg-brand-blue text-white' : 'hover:bg-sidebar text-muted-dark'
                             )}
@@ -361,27 +363,41 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     {project.date && <span className="text-[7px] font-semibold opacity-50">{formatMonthYear(project.date)}</span>}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 opacity-0 group-hover/project:opacity-100 transition-opacity shrink-0">
-                                <button onClick={(e) => { e.stopPropagation(); onEditProject(project); }} title="Renombrar/Editar" className="p-1 hover:text-brand-green"><Edit3 className="w-3.5 h-3.5" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); }} title="Duplicar" className="p-1 hover:text-brand-green"><Copy className="w-3.5 h-3.5" /></button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setProjectActionMenu(prev => prev === project.id ? null : project.id); }}
+                                title="Más opciones"
+                                className="p-1.5 rounded-lg opacity-0 group-hover/project:opacity-100 hover:bg-black/10 transition-opacity shrink-0"
+                            >
+                                <MoreVertical className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {projectActionMenu === project.id && (
+                            <div className="absolute right-2 top-12 z-30 w-44 bg-white border border-border rounded-xl shadow-sm p-1.5 animate-in fade-in zoom-in-95 text-muted-dark">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onEditProject(project); setProjectActionMenu(null); }}
+                                    className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide hover:bg-sidebar hover:text-brand-green"
+                                >
+                                    <Edit3 className="w-3.5 h-3.5" /> Renombrar/Editar
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); setProjectActionMenu(null); }}
+                                    className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide hover:bg-sidebar hover:text-brand-green"
+                                >
+                                    <Copy className="w-3.5 h-3.5" /> Duplicar
+                                </button>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setConfirmDelete({ type: 'project', id: project.id, name: project.name });
+                                        setProjectActionMenu(null);
                                     }}
-                                    title="Eliminar Proyecto"
-                                    className="p-1 hover:text-status-red"
+                                    className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide hover:bg-sidebar hover:text-status-red"
                                 >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-3.5 h-3.5" /> Eliminar Proyecto
                                 </button>
                             </div>
-                            {!term && (
-                                <GripVertical
-                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-30 group-hover/project:opacity-60 transition-opacity"
-                                    title="Arrastrar para reordenar"
-                                />
-                            )}
-                        </div>
+                        )}
 
                         {currentProjectId === project.id && (
                             <div className="ml-5 pl-3 border-l-2 border-brand-blue/20 space-y-4 py-2 animate-in slide-in-from-left-2">
