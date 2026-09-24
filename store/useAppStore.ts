@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Project, Chapter, APU, HistoryItem, ProjectSheet } from '../types';
 import { normalizeApu } from '../lib/apuCalculations';
-import { getDescendantChapterIds } from '../lib/chapters';
+import { getDescendantChapterIds, getChapterChildren, insertInOrder } from '../lib/chapters';
 
 const LIB_KEY = 'apu_engine_library';
 const PROJECT_PREFIX = 'apu_engine_project_';
@@ -138,16 +138,19 @@ export const useAppStore = () => {
 
     const chapterIdMap = new Map<string, string>();
     (sourceData.chapters || []).forEach((c: Chapter) => chapterIdMap.set(c.id, crypto.randomUUID()));
+    const apuIdMap = new Map<string, string>();
+    (sourceData.apus || []).forEach((a: APU) => apuIdMap.set(a.id, crypto.randomUUID()));
     const duplicatedChapters = (sourceData.chapters || []).map((c: Chapter) => ({
       ...c,
       id: chapterIdMap.get(c.id)!,
       projectId: newId,
-      parentChapterId: c.parentChapterId ? (chapterIdMap.get(c.parentChapterId) || c.parentChapterId) : c.parentChapterId
+      parentChapterId: c.parentChapterId ? (chapterIdMap.get(c.parentChapterId) || c.parentChapterId) : c.parentChapterId,
+      ...(c.childOrder ? { childOrder: c.childOrder.map(id => chapterIdMap.get(id) || apuIdMap.get(id) || id) } : {})
     }));
 
     const duplicatedApus = (sourceData.apus || []).map((a: APU) => ({
       ...a,
-      id: crypto.randomUUID(),
+      id: apuIdMap.get(a.id)!,
       projectId: newId,
       chapterId: chapterIdMap.get(a.chapterId) || a.chapterId
     }));
@@ -162,12 +165,42 @@ export const useAppStore = () => {
       if (chapter.parentChapterId) {
         const parent = prev.find(c => c.id === chapter.parentChapterId);
         if (!parent || parent.parentChapterId) return prev; // el padre debe ser un capítulo raíz (un solo nivel)
+        // el subcapítulo nuevo queda al final del capítulo (después de sus partidas actuales), no arriba
+        const order = [...getChapterChildren(parent, prev, apus).map(c => c.id), chapter.id];
+        return [...prev.map(c => c.id === parent.id ? { ...c, childOrder: order } : c), chapter];
       }
       return [...prev, chapter];
     });
-  }, []);
+  }, [apus]);
+
+  /** Mueve un hijo (partida propia o subcapítulo) dentro del orden mezclado de un capítulo raíz, antes de `beforeId` o al final. */
+  const moveChildInChapter = useCallback((parentId: string, childId: string, beforeId: string | null, apusOverride?: APU[]) => {
+    setChapters(prev => {
+      const parent = prev.find(c => c.id === parentId);
+      if (!parent || parent.parentChapterId || childId === beforeId) return prev;
+      const ids = getChapterChildren(parent, prev, apusOverride || apus).map(c => c.id);
+      if (!ids.includes(childId)) return prev;
+      return prev.map(c => c.id === parentId ? { ...c, childOrder: insertInOrder(ids, childId, beforeId) } : c);
+    });
+  }, [apus]);
+
+  /** Sube/baja un hijo de un capítulo raíz un lugar dentro del orden mezclado (una partida puede saltar un subcapítulo completo). */
+  const stepChildInChapter = useCallback((parentId: string, childId: string, direction: 'up' | 'down') => {
+    setChapters(prev => {
+      const parent = prev.find(c => c.id === parentId);
+      if (!parent) return prev;
+      const ids = getChapterChildren(parent, prev, apus).map(c => c.id);
+      const idx = ids.indexOf(childId);
+      const target = direction === 'up' ? idx - 1 : idx + 1;
+      if (idx === -1 || target < 0 || target >= ids.length) return prev;
+      [ids[idx], ids[target]] = [ids[target], ids[idx]];
+      return prev.map(c => c.id === parentId ? { ...c, childOrder: ids } : c);
+    });
+  }, [apus]);
 
   const moveChapter = useCallback((chapterId: string, direction: 'up' | 'down') => {
+    const sub = chapters.find(c => c.id === chapterId && c.parentChapterId);
+    if (sub) { stepChildInChapter(sub.parentChapterId!, chapterId, direction); return; }
     setChapters(prev => {
       const idx = prev.findIndex(c => c.id === chapterId);
       if (idx === -1) return prev;
@@ -186,7 +219,7 @@ export const useAppStore = () => {
       [newChapters[idx], newChapters[targetIdx]] = [newChapters[targetIdx], newChapters[idx]];
       return newChapters;
     });
-  }, []);
+  }, [chapters, stepChildInChapter]);
 
   /** Reordena un proyecto en la biblioteca, insertándolo antes de `beforeProjectId` (o al final si es null). */
   const reorderProject = useCallback((projectId: string, beforeProjectId: string | null) => {
@@ -203,6 +236,13 @@ export const useAppStore = () => {
 
   /** Reordena un capítulo dentro de su proyecto, insertándolo antes de `beforeChapterId` (o al final si es null). */
   const reorderChapter = useCallback((chapterId: string, beforeChapterId: string | null) => {
+    const sub = chapters.find(c => c.id === chapterId && c.parentChapterId);
+    if (sub) {
+      const target = beforeChapterId !== null ? chapters.find(c => c.id === beforeChapterId) : null;
+      if (target && target.parentChapterId !== sub.parentChapterId) return; // no reparenting silencioso por drag-and-drop
+      moveChildInChapter(sub.parentChapterId!, chapterId, beforeChapterId);
+      return;
+    }
     setChapters(prev => {
       const chapter = prev.find(c => c.id === chapterId);
       if (!chapter || chapterId === beforeChapterId) return prev;
@@ -225,7 +265,7 @@ export const useAppStore = () => {
       result.splice(insertPos, 0, chapter);
       return result;
     });
-  }, []);
+  }, [chapters, moveChildInChapter]);
 
   const deleteChapter = useCallback((id: string) => {
     const idsToDelete = new Set(getDescendantChapterIds(chapters, id));
@@ -258,6 +298,9 @@ export const useAppStore = () => {
   }, []);
 
   const moveApu = useCallback((apuId: string, direction: 'up' | 'down') => {
+    const apu = apus.find(a => a.id === apuId);
+    const parent = apu && chapters.find(c => c.id === apu.chapterId && !c.parentChapterId);
+    if (parent) { stepChildInChapter(parent.id, apuId, direction); return; }
     setApus(prev => {
       const idx = prev.findIndex(a => a.id === apuId);
       if (idx === -1) return prev;
@@ -275,31 +318,42 @@ export const useAppStore = () => {
       [newApus[idx], newApus[targetIdx]] = [newApus[targetIdx], newApus[idx]];
       return newApus;
     });
-  }, []);
+  }, [apus, chapters, stepChildInChapter]);
 
-  const moveApuToChapter = useCallback((apuId: string, toChapterId: string, beforeApuId: string | null) => {
-    setApus(prev => {
-      const apu = prev.find(a => a.id === apuId);
-      if (!apu || (apu.chapterId === toChapterId && beforeApuId === apuId)) return prev;
-      const withoutApu = prev.filter(a => a.id !== apuId);
-      const updatedApu = { ...apu, chapterId: toChapterId };
-      if (beforeApuId !== null) {
-        const insertIdx = withoutApu.findIndex(a => a.id === beforeApuId);
-        if (insertIdx !== -1) {
-          const result = [...withoutApu];
-          result.splice(insertIdx, 0, updatedApu);
-          return result;
-        }
-      }
-      let insertPos = withoutApu.length;
+  /** Mueve una partida a otro capítulo/subcapítulo (o dentro del mismo), antes de `beforeId` o al final. En un capítulo raíz `beforeId` puede ser una partida propia o un subcapítulo. */
+  const moveApuToChapter = useCallback((apuId: string, toChapterId: string, beforeId: string | null) => {
+    const apu = apus.find(a => a.id === apuId);
+    if (!apu || apuId === beforeId) return;
+    const withoutApu = apus.filter(a => a.id !== apuId);
+    const updatedApu = { ...apu, chapterId: toChapterId };
+    const beforeApuIdx = beforeId !== null ? withoutApu.findIndex(a => a.id === beforeId && a.chapterId === toChapterId) : -1;
+    let insertPos = beforeApuIdx;
+    if (insertPos === -1) {
+      insertPos = withoutApu.length;
       for (let i = withoutApu.length - 1; i >= 0; i--) {
         if (withoutApu[i].chapterId === toChapterId) { insertPos = i + 1; break; }
       }
-      const result = [...withoutApu];
-      result.splice(insertPos, 0, updatedApu);
-      return result;
-    });
-  }, []);
+    }
+    const nextApus = [...withoutApu];
+    nextApus.splice(insertPos, 0, updatedApu);
+    setApus(nextApus);
+    if (chapters.some(c => c.id === toChapterId && !c.parentChapterId)) moveChildInChapter(toChapterId, apuId, beforeId, nextApus);
+  }, [apus, chapters, moveChildInChapter]);
+
+  /** Duplica una partida y deja la copia inmediatamente después del original. */
+  const duplicateApu = useCallback((source: APU, newId: string) => {
+    const dup: APU = { ...JSON.parse(JSON.stringify(source)), id: newId, createdAt: Date.now() };
+    const i = apus.findIndex(a => a.id === source.id);
+    const nextApus = [...apus];
+    nextApus.splice(i === -1 ? nextApus.length : i + 1, 0, dup);
+    setApus(nextApus);
+    const parent = chapters.find(c => c.id === source.chapterId && !c.parentChapterId);
+    if (parent) {
+      const ids = getChapterChildren(parent, chapters, nextApus).map(c => c.id);
+      const next = ids[ids.indexOf(source.id) + 1] ?? null;
+      moveChildInChapter(parent.id, newId, next === newId ? null : next, nextApus);
+    }
+  }, [apus, chapters, moveChildInChapter]);
 
   // Método para restaurar estado React después de una carga desde Drive
   const reloadFromStorage = useCallback(() => {
@@ -315,8 +369,8 @@ export const useAppStore = () => {
   return {
     sheet, setSheet,
     projects, setProjects, reorderProject,
-    chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
-    apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,
+    chapters, setChapters, addChapter, moveChapter, reorderChapter, moveChildInChapter, deleteChapter,
+    apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter, duplicateApu,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved,

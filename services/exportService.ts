@@ -3,6 +3,7 @@ import { LOGO_BASE64 } from './logoData';
 import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES } from '../lib/apuCalculations';
 import { formatCLP as fmtCLP, formatNumber } from '../lib/number';
+import { buildChapterOutline } from '../lib/chapters';
 
 const getJsPDF = () => {
   const g = window as any;
@@ -81,30 +82,19 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
 
   drawCorporateHeader(doc, project, 'Análisis de Precios Unitarios');
 
-  const projectChapters = chapters
-    .filter(c => c.projectId === project.id && !c.parentChapterId)
-
-  projectChapters.forEach((chapter, cIdx) => {
-    const chapterNumber = cIdx + 1;
-    const subchapters = chapters.filter(c => c.parentChapterId === chapter.id);
-
+  buildChapterOutline(chapters, apus, project.id).forEach(({ chapter, number: chapterNumber, entries: outlineEntries }) => {
+    // Partidas en el orden mezclado del capítulo (propias y de subcapítulos intercaladas)
     const entries: { apu: APU; apuNumber: string; headerText: string }[] = [];
-    subchapters.forEach((sub, sIdx) => {
-      const subNumber = `${chapterNumber}.${sIdx + 1}`;
-      apus.filter(a => a.chapterId === sub.id).forEach((apu, aIdx) => {
-        entries.push({
-          apu,
-          apuNumber: `${subNumber}.${aIdx + 1}`,
-          headerText: `CAPÍTULO ${chapterNumber}: ${chapter.name.toUpperCase()} — SUBCAPÍTULO ${subNumber}: ${sub.name.toUpperCase()}`
-        });
-      });
-    });
-    apus.filter(a => a.chapterId === chapter.id).forEach((apu, aIdx) => {
-      entries.push({
+    outlineEntries.forEach(entry => {
+      if (entry.kind === 'apu') {
+        entries.push({ apu: entry.apu, apuNumber: entry.number, headerText: `CAPÍTULO ${chapterNumber}: ${chapter.name.toUpperCase()}` });
+        return;
+      }
+      entry.apus.forEach(({ apu, number }) => entries.push({
         apu,
-        apuNumber: `${chapterNumber}.${subchapters.length + aIdx + 1}`,
-        headerText: `CAPÍTULO ${chapterNumber}: ${chapter.name.toUpperCase()}`
-      });
+        apuNumber: number,
+        headerText: `CAPÍTULO ${chapterNumber}: ${chapter.name.toUpperCase()} — SUBCAPÍTULO ${entry.number}: ${entry.chapter.name.toUpperCase()}`
+      }));
     });
 
     entries.forEach(({ apu, apuNumber, headerText }) => {
@@ -224,45 +214,40 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   let totalNetoProyecto = 0;
   const chapterSummary: { n: number; name: string; total: number }[] = [];
 
-  const projectChapters = chapters
-    .filter(c => c.projectId === project.id && !c.parentChapterId)
-
-  projectChapters.forEach((chap, cIdx) => {
-    const chapterNumber = cIdx + 1;
-    const subchapters = chapters.filter(c => c.parentChapterId === chap.id);
-    const directApus = apus.filter(a => a.chapterId === chap.id);
-    const totalApuCount = directApus.length + subchapters.reduce((n, s) => n + apus.filter(a => a.chapterId === s.id).length, 0);
+  buildChapterOutline(chapters, apus, project.id).forEach(({ chapter: chap, number, entries }) => {
+    const chapterNumber = Number(number);
+    const totalApuCount = entries.reduce((n, e) => n + (e.kind === 'apu' ? 1 : e.apus.length), 0);
 
     if (totalApuCount === 0) return;
 
     let chapterTotal = 0;
     const rows: any[] = [];
 
-    subchapters.forEach((sub, sIdx) => {
-      const subApus = apus.filter(a => a.chapterId === sub.id);
-      if (subApus.length === 0) return;
-      const subNumber = `${chapterNumber}.${sIdx + 1}`;
-      rows.push([{ content: `${subNumber} ${sub.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [248, 250, 253], textColor: COLOR_HDG_BLUE, fontStyle: 'bold' } }]);
+    // Filas en el orden mezclado del capítulo: partidas propias y subcapítulos intercalados
+    entries.forEach(entry => {
+      if (entry.kind === 'apu') {
+        const apu = entry.apu;
+        const stats = calculateTotals(apu, project);
+        const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
+        totalNetoProyecto += subtotalPartida;
+        chapterTotal += subtotalPartida;
+        rows.push([entry.number, apu.name, pdfUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)]);
+        return;
+      }
+      if (entry.apus.length === 0) return;
+      const subNumber = entry.number;
+      rows.push([{ content: `${subNumber} ${entry.chapter.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [248, 250, 253], textColor: COLOR_HDG_BLUE, fontStyle: 'bold' } }]);
       let subTotal = 0;
-      subApus.forEach((apu, aIdx) => {
+      entry.apus.forEach(({ apu, number: apuNumber }) => {
         const stats = calculateTotals(apu, project);
         const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
         subTotal += subtotalPartida; chapterTotal += subtotalPartida; totalNetoProyecto += subtotalPartida;
-        rows.push([`${subNumber}.${aIdx + 1}`, apu.name, pdfUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)]);
+        rows.push([apuNumber, apu.name, pdfUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)]);
       });
       rows.push([
         { content: `SUBTOTAL SUBCAPÍTULO ${subNumber}`, colSpan: 5, styles: { halign: 'right', fontStyle: 'italic' } },
         { content: formatCLP(subTotal), styles: { fontStyle: 'italic' } }
       ]);
-    });
-
-    directApus.forEach((apu, aIdx) => {
-      const apuNumber = `${chapterNumber}.${subchapters.length + aIdx + 1}`;
-      const stats = calculateTotals(apu, project);
-      const subtotalPartida = stats.precioUnitarioNeto * apu.quantity;
-      totalNetoProyecto += subtotalPartida;
-      chapterTotal += subtotalPartida;
-      rows.push([apuNumber, apu.name, pdfUnit(apu.unit), formatNumPresupuesto(apu.quantity), formatCLP(stats.precioUnitarioNeto), formatCLP(subtotalPartida)]);
     });
 
     (doc as any).autoTable({

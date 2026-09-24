@@ -3,7 +3,9 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 import { Project, Chapter, APU } from '../types';
 import { calculateApuTotals, getZeroCostInfo } from '../lib/apuCalculations';
 import { formatNumber } from '../lib/number';
-import { getRootChapters, getSubchapters } from '../lib/chapters';
+import { buildChapterOutline } from '../lib/chapters';
+
+type ApuRow = APU & { number: string; displayPU: number; subtotal: number };
 
 interface ProjectGeneralViewProps {
   project: Project;
@@ -19,28 +21,22 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
 
   const budgetData = useMemo(() => {
     let totalNetoProyecto = 0;
-    const withStats = (apu: APU, number: string) => {
+    const withStats = (apu: APU, number: string): ApuRow => {
       const { precioUnitarioNeto } = calculateApuTotals(apu, project);
       const subtotal = precioUnitarioNeto * (Number(apu.quantity) || 0);
       return { ...apu, number, displayPU: precioUnitarioNeto, subtotal };
     };
 
-    const chaptersWithTotals = getRootChapters(chapters, project.id).map((chapter, cIdx) => {
-      const chapterNumber = String(cIdx + 1);
-
-      const subchapters = getSubchapters(chapters, chapter.id).map((sub, sIdx) => {
-        const subNumber = `${chapterNumber}.${sIdx + 1}`;
-        const subApus = apus.filter(a => a.chapterId === sub.id).map((apu, aIdx) => withStats(apu, `${subNumber}.${aIdx + 1}`));
-        const totalChapter = subApus.reduce((s, a) => s + a.subtotal, 0);
-        return { ...sub, number: subNumber, apus: subApus, totalChapter };
+    const chaptersWithTotals = buildChapterOutline(chapters, apus, project.id).map(({ chapter, number, entries }) => {
+      // Hijos en su orden mezclado: partidas propias y subcapítulos intercalados
+      const children = entries.map(entry => {
+        if (entry.kind === 'apu') return { kind: 'apu' as const, apu: withStats(entry.apu, entry.number) };
+        const subApus = entry.apus.map(({ apu, number: n }) => withStats(apu, n));
+        return { kind: 'sub' as const, sub: { ...entry.chapter, number: entry.number, apus: subApus, totalChapter: subApus.reduce((s, a) => s + a.subtotal, 0) } };
       });
-
-      const directApus = apus.filter(a => a.chapterId === chapter.id)
-        .map((apu, aIdx) => withStats(apu, `${chapterNumber}.${subchapters.length + aIdx + 1}`));
-
-      const totalChapter = directApus.reduce((s, a) => s + a.subtotal, 0) + subchapters.reduce((s, sub) => s + sub.totalChapter, 0);
+      const totalChapter = children.reduce((s, c) => s + (c.kind === 'apu' ? c.apu.subtotal : c.sub.totalChapter), 0);
       totalNetoProyecto += totalChapter;
-      return { ...chapter, number: chapterNumber, subchapters, directApus, totalChapter };
+      return { ...chapter, number, children, totalChapter };
     });
 
     return { chaptersWithTotals, totalNetoProyecto };
@@ -87,7 +83,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
             </thead>
             <tbody>
               {budgetData.chaptersWithTotals.map(chapter => {
-                const renderApuRow = (apu: typeof chapter.directApus[number]) => {
+                const renderApuRow = (apu: ApuRow) => {
                   const zero = getZeroCostInfo(apu, project);
                   return (
                     <tr key={apu.id} className="border-b border-border hover:bg-sidebar/40 transition-colors group/row">
@@ -145,7 +141,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                       <td className="px-8 py-3 text-right font-bold text-brand-blue text-xs">{formatCLP(chapter.totalChapter)}</td>
                     </tr>
 
-                    {chapter.subchapters.map(sub => (
+                    {chapter.children.map(child => child.kind === 'apu' ? renderApuRow(child.apu) : (() => { const sub = child.sub; return (
                       <React.Fragment key={sub.id}>
                         <tr className="bg-sidebar/50">
                           <td className="pl-4 pr-0 py-2"></td>
@@ -163,9 +159,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
                         </tr>
                         {sub.apus.map(apu => renderApuRow(apu))}
                       </React.Fragment>
-                    ))}
-
-                    {chapter.directApus.map(apu => renderApuRow(apu))}
+                    ); })())}
                   </React.Fragment>
                 );
               })}
