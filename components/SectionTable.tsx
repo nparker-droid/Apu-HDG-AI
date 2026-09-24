@@ -33,7 +33,7 @@ const parseLocaleNumber = (value: string | number) => parseNumber(value, 'money'
 
 const formatThousands = (value: number) => formatNumber(Math.round(Number(value) || 0));
 
-const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/40' : '';
+const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-status-amber/40 bg-status-amber/5' : '';
 
 const SectionTable: React.FC<SectionTableProps> = ({
   category,
@@ -93,10 +93,10 @@ const SectionTable: React.FC<SectionTableProps> = ({
         total: 0,
         note: copied.note || undefined
       };
-      
+
       const isLabor = category === ItemCategory.MANO_DE_OBRA;
       newItem.total = computeItemTotal(category, newItem);
-      
+
       onChange([...items, newItem]);
       toast.success(`Recurso "${newItem.description}" pegado con éxito`);
     } catch (e) {
@@ -309,20 +309,20 @@ const SectionTable: React.FC<SectionTableProps> = ({
   return (
     <div className="overflow-visible" ref={containerRef}>
       <div className="flex justify-between items-center mb-4 px-1">
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Desglose de {category}</h4>
+        <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest">Desglose de {category}</h4>
       </div>
 
       <table className="w-full text-left border-separate border-spacing-y-2">
         <thead>
-          <tr className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
+          <tr className="text-[9px] font-bold text-muted-light uppercase tracking-[0.2em]">
             <th className="pb-1 pl-4">Recurso</th>
             <th className="pb-1 text-center w-20">Unid.</th>
             <th className="pb-1 text-right w-36">
               <div className="flex items-center justify-end gap-1">
                 <span title={isLabor ? 'Rendimiento: unidades del recurso (p.ej. HH) por unidad de partida. Total = Rend. × P.Unit.' : 'Cantidad por unidad de partida. Total = Cant. × P.Unit.'}>{isLabor ? 'Rend. (u/unid)' : 'Cant.'}</span>
                 <span className="relative group inline-flex">
-                  <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
-                  <span className="pointer-events-none absolute right-0 top-5 z-[120] hidden w-48 rounded-xl bg-[#004071] px-3 py-2 text-[9px] font-bold normal-case tracking-normal text-white shadow-xl group-hover:block">
+                  <HelpCircle className="w-3 h-3 text-muted-light cursor-help" />
+                  <span className="pointer-events-none absolute right-0 top-5 z-[120] hidden w-48 rounded-xl bg-brand-blue px-3 py-2 text-[9px] font-bold normal-case tracking-normal text-white shadow-sm group-hover:block">
                     Acepta punto o coma como decimal. Ej: 1,25 o 1.25
                   </span>
                 </span>
@@ -336,7 +336,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
         <tbody>
           {items.map((item, idx) => (
             <React.Fragment key={item.id}>
-            <tr className="group bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all">
+            <tr className="group bg-white border border-border rounded-2xl shadow-sm hover:border-muted-light transition-all">
               <td className="py-3 pl-4 relative">
                 <input
                   type="text"
@@ -347,11 +347,11 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   }}
                   onFocus={() => item.description && setShowHistoryForIdx(idx)}
                   onBlur={() => handleBlurItem(idx)}
-                  className={`w-full bg-transparent rounded-lg focus:ring-0 text-sm font-bold text-slate-700 ${emptyFieldClass(!item.description)}`}
+                  className={`w-full bg-transparent rounded-lg focus:ring-0 text-sm font-bold text-ink ${emptyFieldClass(!item.description)}`}
                   placeholder="Descripción..."
                 />
                 {showHistoryForIdx === idx && filteredHistory.length > 0 && (
-                  <div className="absolute z-[100] left-0 top-full mt-2 w-full min-w-[320px] bg-white border border-slate-200 shadow-2xl rounded-[1.5rem] p-3">
+                  <div className="absolute z-[100] left-0 top-full mt-2 w-full min-w-[320px] bg-white border border-border shadow-sm rounded-2xl p-3">
                     {filteredHistory.map((h, hIdx) => (
                       <button
                         key={`${h.description}-${hIdx}`}
@@ -372,7 +372,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                           onChange(newItems);
                           setShowHistoryForIdx(null);
                         }}
-                        className="w-full text-left px-4 py-3 rounded-xl hover:bg-[#004071] hover:text-white flex justify-between items-center"
+                        className="w-full text-left px-4 py-3 rounded-xl hover:bg-brand-blue hover:text-white flex justify-between items-center"
                       >
                         <span className="font-bold text-xs">{h.description}</span>
                         <span className="font-mono text-[10px]">${(Number(h.unitPrice) || 0).toLocaleString('es-CL')}</span>
@@ -381,7 +381,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   </div>
                 )}
               </td>
-              <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} className={`w-full text-center bg-transparent rounded-lg text-xs font-bold text-slate-400 uppercase ${emptyFieldClass(!item.unit)}`} /></td>
+              <td><input type="text" value={formatUnit(item.unit || '')} onChange={e => updateItem(idx, 'unit', e.target.value)} className={`w-full text-center bg-transparent rounded-lg text-xs font-bold text-muted uppercase ${emptyFieldClass(!item.unit)}`} /></td>
               <td className="px-2">
                 <NumberInput
                   value={Number(isLabor ? item.performance : item.quantity) || 0}
@@ -389,12 +389,12 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   maxDecimals={4}
                   onValueChange={v => updateItem(idx, isLabor ? 'performance' : 'quantity', v)}
                   onBlur={() => { checkDeviation(items[idx], 'performance'); handleBlurItem(idx); }}
-                  className={`w-full text-right bg-transparent rounded-lg font-mono text-sm font-black text-[#88C13E] ${emptyFieldClass((Number(isLabor ? item.performance : item.quantity) || 0) === 0)}`}
+                  className={`w-full text-right bg-transparent rounded-lg font-mono text-sm font-bold text-brand-green ${emptyFieldClass((Number(isLabor ? item.performance : item.quantity) || 0) === 0)}`}
                 />
               </td>
               <td className="px-2">
-                <div className="flex items-center justify-end gap-1 px-2 py-1 bg-slate-50/50 rounded-lg group-hover:bg-white transition-colors border border-transparent group-hover:border-slate-100">
-                  <span className="text-[10px] text-slate-400 font-bold">$</span>
+                <div className="flex items-center justify-end gap-1 px-2 py-1 bg-sidebar/50 rounded-lg group-hover:bg-white transition-colors border border-transparent group-hover:border-border">
+                  <span className="text-[10px] text-muted font-bold">$</span>
                   <NumberInput
                     value={Number(item.unitPrice) || 0}
                     mode="money"
@@ -402,31 +402,31 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     maxDecimals={2}
                     onValueChange={v => updateItem(idx, 'unitPrice', v)}
                     onBlur={() => { checkDeviation(items[idx], 'unitPrice'); handleBlurItem(idx); }}
-                    className={`w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-black text-slate-600 p-0 ${(Number(item.unitPrice) || 0) === 0 ? 'text-red-400' : ''}`}
+                    className={`w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-bold text-muted-dark p-0 ${(Number(item.unitPrice) || 0) === 0 ? 'text-status-red' : ''}`}
                   />
                   <button
                     type="button"
                     onClick={() => handleGeneratePrice(item, idx)}
                     disabled={loadingPriceItemIds[item.id]}
                     title="Obtener precio sugerido por IA y Web"
-                    className="p-1 text-slate-300 hover:text-[#004071] transition-colors rounded disabled:opacity-50"
+                    className="p-1 text-muted-light hover:text-brand-blue transition-colors rounded disabled:opacity-50"
                   >
                     {loadingPriceItemIds[item.id] ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-[#004071]" />
+                      <Loader2 className="w-3 h-3 animate-spin text-brand-blue" />
                     ) : (
-                      <Sparkles className="w-3.5 h-3.5 text-[#88C13E]" />
+                      <Sparkles className="w-3.5 h-3.5 text-brand-green" />
                     )}
                   </button>
                 </div>
               </td>
-              <td className="text-right pr-4 font-mono text-sm font-black text-[#004071]">${formatThousands(Number(item.total) || 0)}</td>
+              <td className="text-right pr-4 font-mono text-sm font-bold text-brand-blue">${formatThousands(Number(item.total) || 0)}</td>
               <td>
                 <div className="flex items-center gap-1 justify-end pr-2">
                   <button
                     type="button"
                     onClick={() => setOpenNotes(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
                     title={item.note ? `Nota: ${item.note}` : 'Agregar nota (origen del precio, pendientes, etc.)'}
-                    className={`p-1 transition-colors ${item.note ? 'text-amber-500 hover:text-amber-600' : 'text-slate-200 hover:text-[#004071]'}`}
+                    className={`p-1 transition-colors ${item.note ? 'text-status-amber hover:opacity-80' : 'text-muted-light hover:text-brand-blue'}`}
                   >
                     <StickyNote className="w-4 h-4" fill={item.note ? 'currentColor' : 'none'} fillOpacity={item.note ? 0.2 : 0} />
                   </button>
@@ -434,28 +434,28 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     type="button"
                     onClick={() => handleCopyItem(item)}
                     title="Copiar recurso"
-                    className="p-1 text-slate-200 hover:text-[#004071] transition-colors"
+                    className="p-1 text-muted-light hover:text-brand-blue transition-colors"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onChange(items.filter(i => i.id !== item.id))} className="p-1 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => onChange(items.filter(i => i.id !== item.id))} className="p-1 text-muted-light hover:text-status-red transition-colors"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </td>
             </tr>
             {openNotes[item.id] && (
               <tr>
                 <td colSpan={6} className="px-4 pb-2 -mt-1">
-                  <div className="flex gap-3 items-start bg-amber-50/70 border border-amber-100 rounded-2xl px-4 py-3">
-                    <StickyNote className="w-4 h-4 text-amber-500 mt-1 shrink-0" />
+                  <div className="flex gap-3 items-start bg-status-amber/10 border border-status-amber/20 rounded-2xl px-4 py-3">
+                    <StickyNote className="w-4 h-4 text-status-amber mt-1 shrink-0" />
                     <textarea
                       autoFocus
                       rows={2}
                       value={item.note || ''}
                       onChange={e => updateItem(idx, 'note', e.target.value)}
                       placeholder="Ej: Precio cotizado Proveedor X 12/09/2026 · pendiente confirmar flete · sensible a tipo de cambio"
-                      className="flex-1 bg-transparent text-xs text-slate-700 resize-y outline-none placeholder:text-amber-300"
+                      className="flex-1 bg-transparent text-xs text-ink resize-y outline-none placeholder:text-status-amber/50"
                     />
-                    <button onClick={() => setOpenNotes(prev => ({ ...prev, [item.id]: false }))} className="p-1 text-amber-400 hover:text-amber-600" title="Cerrar nota">
+                    <button onClick={() => setOpenNotes(prev => ({ ...prev, [item.id]: false }))} className="p-1 text-status-amber/70 hover:text-status-amber" title="Cerrar nota">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -469,23 +469,23 @@ const SectionTable: React.FC<SectionTableProps> = ({
       <div className="flex gap-3 mt-4">
         <button
           onClick={() => onChange([...items, { id: crypto.randomUUID(), description: '', unit: '', quantity: 1, performance: 1, unitPrice: 0, total: 0 }])}
-          className="flex-1 py-4 border-2 border-dashed border-slate-100 hover:border-slate-300 hover:text-[#004071] transition-all rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3"
+          className="flex-1 py-4 border-2 border-dashed border-border hover:border-muted-light hover:text-brand-blue transition-all rounded-2xl text-muted-light font-bold text-[10px] uppercase flex items-center justify-center gap-3"
         >
           <Plus className="w-3 h-3" /> Añadir recurso
         </button>
         <button
           type="button"
           onClick={() => setShowBulkPaste(true)}
-          className="px-6 py-4 border-2 border-dashed border-slate-100 hover:border-slate-300 hover:text-[#004071] transition-all rounded-[1.5rem] text-slate-300 font-black text-[10px] uppercase flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-6 py-4 border-2 border-dashed border-border hover:border-muted-light hover:text-brand-blue transition-all rounded-2xl text-muted-light font-bold text-[10px] uppercase flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
           title="Pegar recursos desde Excel"
         >
-          <ClipboardPaste className="w-4 h-4 text-[#88C13E]" /> Pegar recursos
+          <ClipboardPaste className="w-4 h-4 text-brand-green" /> Pegar recursos
         </button>
         {hasCopiedItem && (
           <button
             type="button"
             onClick={handlePasteItem}
-            className="px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all rounded-[1.5rem] font-black text-[10px] uppercase flex items-center justify-center gap-2"
+            className="px-4 py-4 bg-sidebar hover:bg-border text-muted-dark transition-all rounded-2xl font-bold text-[10px] uppercase flex items-center justify-center gap-2"
             title="Pegar recurso copiado"
           >
             <Copy className="w-4 h-4" /> 1 recurso
@@ -493,15 +493,15 @@ const SectionTable: React.FC<SectionTableProps> = ({
         )}
       </div>
       {showBulkPaste && (
-        <div className="fixed inset-0 z-[80] bg-[#004071]/40 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden">
-            <div className="px-7 py-5 bg-slate-50 border-b flex items-center justify-between">
+        <div className="fixed inset-0 z-[80] bg-ink/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl border border-border shadow-xl overflow-hidden">
+            <div className="px-7 py-5 bg-sidebar border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-black text-[#004071] uppercase tracking-widest">Pegar recursos desde Excel</h3>
-                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Formato: Recurso; unidad; cantidad; precio; nota (opcional) — acepta . o , decimal</p>
+                <h3 className="text-sm font-bold text-brand-blue uppercase tracking-widest">Pegar recursos desde Excel</h3>
+                <p className="text-[9px] font-bold text-muted uppercase mt-1">Formato: Recurso; unidad; cantidad; precio; nota (opcional) — acepta . o , decimal</p>
               </div>
-              <button onClick={() => setShowBulkPaste(false)} className="p-2 hover:bg-slate-200 rounded-full">
-                <X className="w-4 h-4 text-slate-400" />
+              <button onClick={() => setShowBulkPaste(false)} className="p-2 hover:bg-border rounded-full">
+                <X className="w-4 h-4 text-muted" />
               </button>
             </div>
             <div className="p-7 space-y-5">
@@ -511,13 +511,13 @@ const SectionTable: React.FC<SectionTableProps> = ({
                 rows={10}
                 autoFocus
                 placeholder={`Excavación manual; m3; 1,25; 18500\nRetiro de excedentes; m3; 1; 12000`}
-                className="w-full rounded-2xl border-2 border-slate-100 focus:border-[#004071] outline-none p-5 font-mono text-xs text-slate-700"
+                className="w-full rounded-2xl border border-border focus:border-brand-blue outline-none p-5 font-mono text-xs text-ink"
               />
               <div className="flex justify-end gap-3">
-                <button onClick={() => setShowBulkPaste(false)} className="px-5 py-3 rounded-xl bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                <button onClick={() => setShowBulkPaste(false)} className="px-5 py-3 rounded-xl bg-sidebar text-muted-dark text-[10px] font-bold uppercase tracking-widest">
                   Cancelar
                 </button>
-                <button onClick={handleBulkPaste} className="px-5 py-3 rounded-xl bg-[#88C13E] text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                <button onClick={handleBulkPaste} className="px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green-dark text-white text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
                   <Check className="w-4 h-4" /> Pegar filas
                 </button>
               </div>

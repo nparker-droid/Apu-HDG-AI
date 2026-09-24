@@ -10,7 +10,7 @@ import NumberInput from './ui/NumberInput';
 import { formatCLP as fmtCLP } from '../lib/number';
 
 const formatCLP = fmtCLP;
-const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-amber-200 bg-amber-50/50' : '';
+const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-status-amber/40 bg-status-amber/5' : '';
 
 interface APUEditorProps {
   apu: APU;
@@ -63,28 +63,28 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-32">
-      <div className="bg-[#004071] text-white rounded-[2rem] p-8 shadow-2xl flex flex-wrap gap-8 items-center relative overflow-hidden border border-transparent">
+      <div className="bg-brand-blue text-white rounded-2xl p-8 shadow-sm flex flex-wrap gap-8 items-center relative overflow-hidden border border-transparent">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-8 relative z-10">
           <div>
-            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Costo Directo Unitario</p>
-            <p className="text-2xl font-black text-white font-mono">{formatCLP(costoDirectoUnitario)}</p>
+            <p className="text-[9px] font-bold uppercase opacity-60 tracking-[0.2em] mb-1">Costo Directo Unitario</p>
+            <p className="text-2xl font-bold text-white font-mono">{formatCLP(costoDirectoUnitario)}</p>
           </div>
           <div>
-            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">
+            <p className="text-[9px] font-bold uppercase opacity-60 tracking-[0.2em] mb-1">
               {apu.divideUnitPrice ? `Precio Unitario (por ${apu.divisorQuantity || 1} ${apu.unit})` : 'Costo Neto Unitario (+GG/Ut)'}
             </p>
-            <p className="text-2xl font-black text-[#88C13E] font-mono">{formatCLP(displayUnitPrice)}</p>
+            <p className="text-2xl font-bold text-brand-green font-mono">{formatCLP(displayUnitPrice)}</p>
           </div>
           <div className="md:text-right">
             <div className="flex items-center gap-3 md:justify-end mb-2">
-              <button onClick={() => exportSingleApuToExcel(project, apu)} className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-xl transition-all shadow-lg flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
+              <button onClick={() => exportSingleApuToExcel(project, apu)} className="bg-brand-green hover:bg-brand-green-dark text-white p-2 rounded-xl transition-all flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest">
                 <FileSpreadsheet className="w-3 h-3" /> Excel APU
               </button>
             </div>
-            <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Partida (Cant. x Neto + IVA)</p>
-            <p className="text-3xl font-black text-[#D9E021] font-mono">{formatCLP(totalPartidaConIva)}</p>
+            <p className="text-[9px] font-bold uppercase opacity-60 tracking-[0.2em] mb-1">Total Partida (Cant. x Neto + IVA)</p>
+            <p className="text-3xl font-bold text-white font-mono">{formatCLP(totalPartidaConIva)}</p>
           </div>
         </div>
       </div>
@@ -96,105 +96,105 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
           { label: 'C. Directo Equipos', val: subEq, icon: <HardHat className="w-3 h-3" />, color: 'text-yellow-500' },
           { label: 'C. Directo Otros', val: subOt, icon: <Globe className="w-3 h-3" />, color: 'text-indigo-500' }
         ].map(item => (
-          <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <div key={item.label} className="bg-white p-4 rounded-2xl border border-border shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <span className={item.color}>{item.icon}</span>
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{item.label}</span>
+              <span className="text-[8px] font-bold text-muted uppercase tracking-widest">{item.label}</span>
             </div>
-            <p className="text-xs font-black text-slate-700 font-mono">{formatCLP(item.val)}</p>
+            <p className="text-xs font-bold text-ink font-mono">{formatCLP(item.val)}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 space-y-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-border p-8 space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-2 space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Hash className="w-3 h-3" /> Ítem</label>
-            <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-[#004071] ${emptyFieldClass(!apu.code)}`} />
+            <label className="text-[9px] font-bold text-muted uppercase tracking-widest flex items-center gap-1"><Hash className="w-3 h-3" /> Ítem</label>
+            <input type="text" value={apu.code} onChange={e => handleChange('code', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-bold text-lg text-brand-blue ${emptyFieldClass(!apu.code)}`} />
           </div>
           <div className="lg:col-span-6 space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Descripción Técnica</label>
+            <label className="text-[9px] font-bold text-muted uppercase tracking-widest">Descripción Técnica</label>
             <div className="relative group">
               <textarea
                 rows={2}
                 value={apu.name}
                 onChange={e => handleChange('name', e.target.value)}
                 placeholder="Partida..."
-                className={`w-full text-xl font-black rounded-xl px-6 pr-36 py-3 text-slate-800 resize-none leading-tight ${emptyFieldClass(!apu.name)}`}
+                className={`w-full text-xl font-bold rounded-xl px-6 pr-36 py-3 text-ink resize-none leading-tight ${emptyFieldClass(!apu.name)}`}
               />
-              <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#004071] hover:bg-[#002D50] text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
-                {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-[#D9E021]" />} Analizar IA
+              <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-blue hover:bg-brand-blue-dark text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest">
+                {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-white" />} Analizar IA
               </button>
             </div>
           </div>
           <div className="lg:col-span-4 grid grid-cols-2 gap-4">
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-black text-lg text-slate-600 ${emptyFieldClass(!apu.unit)}`} /></div>
-            <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cantidad</label><NumberInput value={apu.quantity} maxDecimals={3} onValueChange={v => onUpdate({ ...apu, quantity: v })} className={`w-full rounded-xl px-4 py-3 text-right font-black text-lg text-[#88C13E] ${emptyFieldClass(!apu.quantity)}`} /></div>
+            <div><label className="text-[9px] font-bold text-muted uppercase tracking-widest">Unidad</label><input type="text" value={apu.unit} onChange={e => handleChange('unit', e.target.value)} className={`w-full rounded-xl px-4 py-3 text-center font-bold text-lg text-muted-dark ${emptyFieldClass(!apu.unit)}`} /></div>
+            <div><label className="text-[9px] font-bold text-muted uppercase tracking-widest">Cantidad</label><NumberInput value={apu.quantity} maxDecimals={3} onValueChange={v => onUpdate({ ...apu, quantity: v })} className={`w-full rounded-xl px-4 py-3 text-right font-bold text-lg text-brand-green ${emptyFieldClass(!apu.quantity)}`} /></div>
           </div>
         </div>
 
-        <div className="border-t border-slate-100 pt-4 space-y-4">
+        <div className="border-t border-border pt-4 space-y-4">
           <div className="flex items-center gap-6">
-            <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[9px] font-black text-slate-400 hover:text-[#004071] uppercase tracking-widest">
+            <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[9px] font-bold text-muted hover:text-brand-blue uppercase tracking-widest">
               <Settings2 className="w-3 h-3" /> Configuración de Costos Indirectos {showConfig ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Dividir Precio Unitario Global</span>
+            <div className="flex items-center gap-3 bg-sidebar px-4 py-2 rounded-xl border border-border">
+              <span className="text-[9px] font-bold text-muted uppercase tracking-widest">Dividir Precio Unitario Global</span>
               <button
                 onClick={() => onUpdate({ ...apu, divideUnitPrice: !apu.divideUnitPrice, divisorQuantity: apu.divisorQuantity || apu.quantity })}
-                className={`w-10 h-5 rounded-full transition-all relative ${apu.divideUnitPrice ? 'bg-[#88C13E]' : 'bg-slate-300'}`}
+                className={`w-10 h-5 rounded-full transition-all relative ${apu.divideUnitPrice ? 'bg-brand-green' : 'bg-border'}`}
               >
                 <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${apu.divideUnitPrice ? 'right-1' : 'left-1'}`}></div>
               </button>
               {apu.divideUnitPrice && (
                 <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-                  <span className="text-[9px] font-black text-slate-400 uppercase">por:</span>
+                  <span className="text-[9px] font-bold text-muted uppercase">por:</span>
                   <NumberInput
                     value={apu.divisorQuantity || 0}
                     onValueChange={v => onUpdate({ ...apu, divisorQuantity: v })}
                     placeholder="Cantidad..."
-                    className="w-20 py-1 bg-white border border-slate-200 rounded-lg text-center text-[10px] font-black text-[#004071]"
+                    className="w-20 py-1 bg-white border border-border rounded-lg text-center text-[10px] font-bold text-brand-blue"
                   />
-                  <span className="text-[9px] font-black text-slate-400 uppercase">{apu.unit}</span>
+                  <span className="text-[9px] font-bold text-muted uppercase">{apu.unit}</span>
                 </div>
               )}
             </div>
           </div>
           {showConfig && (
-            <div className="mt-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-6 animate-in slide-in-from-top-2">
+            <div className="mt-4 bg-sidebar p-6 rounded-2xl border border-border grid grid-cols-1 md:grid-cols-4 gap-6 animate-in slide-in-from-top-2">
               <div className="flex flex-col gap-2">
-                <span className="text-[8px] font-black text-slate-400 uppercase">Origen de Tasas</span>
-                <button onClick={() => onUpdate({ ...apu, useProjectGlobalRates: !apu.useProjectGlobalRates })} className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all ${apu.useProjectGlobalRates ? 'bg-[#88C13E] text-white shadow-md' : 'bg-slate-200 text-slate-500'}`}>
+                <span className="text-[8px] font-bold text-muted uppercase">Origen de Tasas</span>
+                <button onClick={() => onUpdate({ ...apu, useProjectGlobalRates: !apu.useProjectGlobalRates })} className={`px-3 py-2 rounded-lg text-[8px] font-bold uppercase transition-all ${apu.useProjectGlobalRates ? 'bg-brand-green text-white' : 'bg-border text-muted-dark'}`}>
                   {apu.useProjectGlobalRates ? 'Valores del Proyecto' : 'Personalizado'}
                 </button>
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
-                <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Leyes Soc. (%)</label>
-                <NumberInput value={laws} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, socialLawsPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <label className="block text-[8px] font-semibold text-muted uppercase mb-1">Leyes Soc. (%)</label>
+                <NumberInput value={laws} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, socialLawsPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-bold text-brand-blue" />
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
-                <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">GG (%)</label>
-                <NumberInput value={overhead} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, overheadPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <label className="block text-[8px] font-semibold text-muted uppercase mb-1">GG (%)</label>
+                <NumberInput value={overhead} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, overheadPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-bold text-brand-blue" />
               </div>
               <div className={!apu.useProjectGlobalRates ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
-                <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1">Utilidad (%)</label>
-                <NumberInput value={utility} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, utilityPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-black text-[#004071]" />
+                <label className="block text-[8px] font-semibold text-muted uppercase mb-1">Utilidad (%)</label>
+                <NumberInput value={utility} maxDecimals={2} onValueChange={v => onUpdate({ ...apu, utilityPercentage: v })} className="w-full py-2 bg-white rounded-lg text-center text-[10px] font-bold text-brand-blue" />
               </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-100 pt-6">
+        <div className="border-t border-border pt-6">
           <div className="flex items-center justify-between mb-6">
-            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl">
+            <div className="flex gap-2 bg-sidebar p-1.5 rounded-xl">
               {[ItemCategory.MATERIAL, ItemCategory.MANO_DE_OBRA, ItemCategory.EQUIPO, ItemCategory.OTROS].map((cat) => (
-                <button key={cat} onClick={() => setActiveTab(cat)} className={`px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === cat ? 'bg-[#004071] text-white shadow-md' : 'text-slate-400 hover:bg-slate-100'}`}>{cat}</button>
+                <button key={cat} onClick={() => setActiveTab(cat)} className={`px-4 py-2 text-[8px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === cat ? 'bg-brand-blue text-white' : 'text-muted hover:bg-white'}`}>{cat}</button>
               ))}
             </div>
             <div className="text-right">
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Costo Directo {activeTab}: </span>
-              <span className="text-xs font-black text-[#004071] font-mono ml-2">{formatCLP(calculateSubtotal(activeTab))}</span>
+              <span className="text-[8px] font-bold text-muted uppercase tracking-widest">Costo Directo {activeTab}: </span>
+              <span className="text-xs font-bold text-brand-blue font-mono ml-2">{formatCLP(calculateSubtotal(activeTab))}</span>
             </div>
           </div>
           <SectionTable
