@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { getZeroCostInfo } from '../../lib/apuCalculations';
-import { Plus, X, ChevronRight, BookOpen, Trash2, Upload, Share2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table, GripVertical } from 'lucide-react';
+import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Edit3, FileText, Table, GripVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
 import { exportProjectToPDF, exportBudgetToPDF } from '../../services/exportService';
+import { formatMonthYear } from '../../lib/date';
 import ConfirmationModal from '../ui/ConfirmationModal';
+
+const normKey = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
 const HidrogestionCorporateLogo = ({ size = "w-10 h-10" }: { size?: string }) => (
     <div className="flex items-center justify-center">
@@ -34,15 +37,12 @@ interface SidebarProps {
     currentApuId: string | null;
     setCurrentApuId: (id: string | null) => void;
     onNewProject: () => void;
-    onUserLibraryOpen: () => void;
     onEditProject: (project: Project) => void;
     onNewChapter: (projectId: string) => void;
     onLibraryOpen: (chapterId: string) => void;
     onCreateApu: (projectId: string, chapterId: string) => void;
     onDuplicateApu: (apu: any) => void;
     onDeleteApu: (apuId: string) => void;
-    onShareProject: (project: Project) => void;
-    handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onDeleteProject: (id: string) => void;
     onDuplicateProject: (id: string) => void;
     moveApu: (id: string, dir: 'up' | 'down') => void;
@@ -55,13 +55,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     projects, chapters, apus, reorderChapter, deleteChapter,
     currentProjectId, setCurrentProjectId,
     currentApuId, setCurrentApuId,
-    onNewProject, onUserLibraryOpen, onEditProject, onNewChapter,
+    onNewProject, onEditProject, onNewChapter,
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
-    onShareProject, handleImport,
     onDeleteProject, onDuplicateProject,
     moveApu, moveApuToChapter, onRenameChapter
 }) => {
-    const activeProject = projects.find(p => p.id === currentProjectId);
+    const [search, setSearch] = useState('');
+    const term = normKey(search);
+    const matchesText = (s: string | undefined) => !term || normKey(s || '').includes(term);
+
+    const chapterMatchesSearch = (chapter: Chapter) =>
+        matchesText(chapter.name) || apus.some(a => a.chapterId === chapter.id && (matchesText(a.name) || matchesText(a.code)));
+
+    const visibleProjects = useMemo(() => projects.filter(project =>
+        !term ||
+        matchesText(project.name) || matchesText(project.code) ||
+        chapters.some(c => c.projectId === project.id && chapterMatchesSearch(c))
+    ), [projects, chapters, apus, term]);
 
     const [confirmDelete, setConfirmDelete] = useState<{
         type: 'project' | 'chapter' | 'apu';
@@ -112,29 +122,31 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </button>
             </div>
 
-            <div className="p-4 grid grid-cols-2 gap-3 min-w-[20rem]">
-                <button onClick={onUserLibraryOpen} className="col-span-2 flex items-center justify-center gap-2 bg-brand-green hover:bg-brand-green-dark text-white font-bold py-4 rounded-2xl transition-all uppercase tracking-widest text-[9px]">
-                    <BookOpen className="w-4 h-4" /> Biblioteca del Usuario
-                </button>
-                <button onClick={onNewProject} className="col-span-2 flex items-center justify-center gap-2 bg-brand-blue hover:bg-brand-blue-dark text-white font-bold py-4 rounded-2xl transition-all uppercase tracking-widest text-[9px]">
+            <div className="px-4 pt-4 min-w-[20rem]">
+                <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-light" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Buscar proyecto o partida…"
+                        className="w-full pl-8 pr-3 py-2 bg-sidebar border border-border rounded-lg text-xs text-ink outline-none focus:border-brand-blue"
+                    />
+                </div>
+            </div>
+
+            <div className="p-4 min-w-[20rem]">
+                <button onClick={onNewProject} className="w-full flex items-center justify-center gap-2 bg-brand-blue hover:bg-brand-blue-dark text-white font-bold py-4 rounded-2xl transition-all uppercase tracking-widest text-[9px]">
                     <Plus className="w-4 h-4" /> Nuevo Proyecto
-                </button>
-                <label className="flex items-center justify-center gap-2 bg-sidebar hover:bg-border text-muted-dark font-bold py-3 rounded-2xl cursor-pointer transition-all uppercase tracking-widest text-[8px]">
-                    <Upload className="w-3 h-3" /> Importar
-                    <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                </label>
-                <button
-                    disabled={!activeProject}
-                    onClick={() => activeProject && onShareProject(activeProject)}
-                    className="flex items-center justify-center gap-2 bg-brand-blue/10 hover:bg-brand-blue/15 text-brand-blue font-bold py-3 rounded-2xl transition-all uppercase tracking-widest text-[8px] disabled:opacity-50"
-                >
-                    <Share2 className="w-3 h-3" /> Exportar
                 </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 pb-10 space-y-4 no-scrollbar relative text-muted-dark min-w-[20rem]">
                 <div className="text-[8px] font-bold uppercase text-muted tracking-[0.2em] px-2 mb-2">Biblioteca de Proyectos</div>
-                {projects.map(project => (
+                {term && visibleProjects.length === 0 && (
+                    <p className="text-center text-[10px] text-muted italic py-6">Sin resultados para "{search}"</p>
+                )}
+                {visibleProjects.map(project => (
                     <div key={project.id} className="group/project space-y-1">
                         <div
                             onClick={() => setCurrentProjectId(project.id)}
@@ -157,6 +169,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 <div className="flex flex-col overflow-hidden">
                                     <span className="text-[10px] font-bold uppercase tracking-tighter whitespace-normal break-words leading-tight">{project.name}</span>
                                     <span className="text-[7px] font-semibold opacity-60 uppercase">{project.code}</span>
+                                    {project.date && <span className="text-[7px] font-semibold opacity-50">{formatMonthYear(project.date)}</span>}
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 opacity-0 group-hover/project:opacity-100 transition-opacity">
@@ -182,7 +195,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="bg-brand-blue text-white text-[8px] font-bold p-2 rounded-lg flex items-center justify-center gap-1 uppercase hover:bg-brand-blue-dark transition-all"><Table className="w-3 h-3" /> Pres. PDF</button>
                                 </div>
 
-                                {chapters.filter(c => c.projectId === project.id).map(chapter => (
+                                {chapters.filter(c => c.projectId === project.id && (!term || chapterMatchesSearch(c))).map(chapter => {
+                                    const chapterApus = apus.filter(a => a.chapterId === chapter.id && (!term || matchesText(a.name) || matchesText(a.code)));
+                                    return (
                                     <div key={chapter.id} className="space-y-1 relative">
                                         {dragOverChapterId === chapter.id && draggedChapterId !== null && draggedChapterId !== chapter.id && (
                                             <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
@@ -283,12 +298,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
                                             onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
                                         >
-                                            {collapsedChapters[chapter.id] && apus.filter(a => a.chapterId === chapter.id).length > 0 && (
+                                            {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
                                                 <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
-                                                    {apus.filter(a => a.chapterId === chapter.id).length} partida(s) — contraído
+                                                    {chapterApus.length} partida(s) — contraído
                                                 </div>
                                             )}
-                                            {!collapsedChapters[chapter.id] && apus.filter(a => a.chapterId === chapter.id).map(apu => (
+                                            {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
                                                 <div key={apu.id}>
                                                     {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
                                                         <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
@@ -334,7 +349,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             )}
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                                 {draggedChapterId && (
                                     <div
                                         onDragOver={(e) => { e.preventDefault(); setDragOverChapterId('__end__'); }}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Upload, Share2 } from 'lucide-react';
 import { useAppStore, STORAGE_ERROR_EVENT, getStorageUsage, STORAGE_QUOTA_BYTES } from './store/useAppStore';
 import ResourceSummary from './components/ResourceSummary';
 import ProjectSheet from './components/ProjectSheet';
@@ -358,15 +358,12 @@ const App: React.FC = () => {
         currentApuId={currentApuId}
         setCurrentApuId={(id) => { if (id !== currentApuId) setCurrentApuId(id); }}
         onNewProject={() => { setEditingProject(null); setIsProjectModalOpen(true); }}
-        onUserLibraryOpen={() => setIsUserLibraryOpen(true)}
         onEditProject={(p) => { setEditingProject(p); setIsProjectModalOpen(true); }}
         onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
         onLibraryOpen={setLibraryChapterId}
         onCreateApu={handleCreateApu}
         onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; const i = apus.findIndex(x => x.id === a.id); const next = [...apus]; next.splice(i + 1, 0, dup); setApus(next); }}
         onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
-        onShareProject={handleShareProject}
-        handleImport={handleImport}
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
@@ -497,6 +494,28 @@ const App: React.FC = () => {
                 </button>
                 <QuickCalculator />
                 <button
+                  onClick={() => setIsUserLibraryOpen(true)}
+                  title="Biblioteca del usuario"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
+                <label
+                  title="Importar proyecto (.json)"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+                <button
+                  disabled={!activeProject}
+                  onClick={() => activeProject && handleShareProject(activeProject)}
+                  title="Exportar proyecto (.json)"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => setIsHelpOpen(true)}
                   title="Manual de operación"
                   className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
@@ -566,7 +585,31 @@ const App: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700">
+          <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700 relative">
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+              {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
+              <button
+                onClick={() => setIsUserLibraryOpen(true)}
+                title="Biblioteca del usuario"
+                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
+              <label
+                title="Importar proyecto (.json)"
+                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                title="Manual de operación"
+                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+            </div>
             <div className="p-8 bg-white rounded-full shadow-inner">
               <Database className="w-20 h-20 text-brand-blue opacity-10" />
             </div>
