@@ -49,6 +49,8 @@ const App: React.FC = () => {
   const [chapterModalContext, setChapterModalContext] = useState<{ projectId: string; parentChapterId?: string } | null>(null);
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [isUserLibraryOpen, setIsUserLibraryOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [driveConnected, setDriveConnected] = useState(false);
@@ -109,6 +111,14 @@ const App: React.FC = () => {
       setDriveConnected(connected);
     });
   }, []);
+
+  // Cierra el menú de Exportar al hacer clic fuera
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const onDown = (e: MouseEvent) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setIsExportMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [isExportMenuOpen]);
 
   // Monitoreo de almacenamiento local: aviso si falla la escritura o se acerca al límite
   useEffect(() => {
@@ -507,27 +517,45 @@ const App: React.FC = () => {
                 >
                   {saveStatus === 'saving' ? <Loader2 className="w-4 h-4 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-4 h-4 text-brand-green" /> : <Save className="w-4 h-4" />}
                 </button>
-                <button
-                  onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
-                  title="Reporte Excel"
-                  className="p-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => exportProjectToPDF(activeProject, chapters, apus)}
-                  title="APUs PDF"
-                  className="p-2 rounded-xl text-white bg-ink hover:opacity-90 transition-all"
-                >
-                  <FileText className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => exportBudgetToPDF(activeProject, chapters, apus)}
-                  title="Presupuesto PDF"
-                  className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all"
-                >
-                  <Table className="w-4 h-4" />
-                </button>
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setIsExportMenuOpen(o => !o)}
+                    title="Exportar"
+                    className="p-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  {isExportMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-border rounded-xl shadow-sm z-50 p-1.5 animate-in fade-in zoom-in-95">
+                      <button
+                        onClick={() => { exportProjectToExcel(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-green"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Reporte Excel
+                      </button>
+                      <button
+                        onClick={() => { exportProjectToPDF(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-blue"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> APUs PDF
+                      </button>
+                      <button
+                        onClick={() => { exportBudgetToPDF(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-blue"
+                      >
+                        <Table className="w-3.5 h-3.5" /> Presupuesto PDF
+                      </button>
+                      <div className="h-px bg-border my-1.5" />
+                      <button
+                        disabled={!activeProject}
+                        onClick={() => { if (activeProject) handleShareProject(activeProject); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-green disabled:opacity-40"
+                      >
+                        <Share2 className="w-3.5 h-3.5" /> Exportar proyecto (.json)
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <QuickCalculator />
                 <button
                   onClick={() => setIsUserLibraryOpen(true)}
@@ -535,14 +563,6 @@ const App: React.FC = () => {
                   className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
                 >
                   <BookOpen className="w-4 h-4" />
-                </button>
-                <button
-                  disabled={!activeProject}
-                  onClick={() => activeProject && handleShareProject(activeProject)}
-                  title="Exportar proyecto (.json)"
-                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
-                >
-                  <Share2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setIsHelpOpen(true)}
