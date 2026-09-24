@@ -1,6 +1,7 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
 import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES, itemAmount } from '../lib/apuCalculations';
+import { buildChapterOutline } from '../lib/chapters';
 
 // Exportación Excel con FÓRMULAS (trazable): cada total de línea, subtotal, CD, GG, Utilidad y P.U.
 // se calcula en la planilla; el presupuesto referencia el P.U. de cada hoja APU.
@@ -108,7 +109,7 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
   if (!XLSX()) { console.error('XLSX no cargado'); return; }
   const wb = XLSX().utils.book_new();
   const used = new Set<string>(['presupuesto']);
-  const projectChapters = chapters.filter(c => c.projectId === project.id && !c.parentChapterId);
+  const outline = buildChapterOutline(chapters, apus, project.id);
 
   // 1) Hojas APU (primero, para conocer sus nombres y celda de P.U.)
   const apuSheets: { name: string; ws: any }[] = [];
@@ -119,15 +120,10 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
     apuSheets.push({ name, ws });
     puRef.set(apu.id, { ref: `${quoteSheet(name)}!${puCell}`, pu });
   };
-  projectChapters.forEach((chap, cIdx) => {
-    const chapterNumber = cIdx + 1;
-    const subchapters = chapters.filter(c => c.parentChapterId === chap.id);
-    subchapters.forEach((sub, sIdx) => {
-      const subNumber = `${chapterNumber}.${sIdx + 1}`;
-      apus.filter(a => a.chapterId === sub.id).forEach((apu, aIdx) => addApuSheet(apu, `${subNumber}.${aIdx + 1}`));
-    });
-    apus.filter(a => a.chapterId === chap.id).forEach((apu, aIdx) => addApuSheet(apu, `${chapterNumber}.${subchapters.length + aIdx + 1}`));
-  });
+  outline.forEach(({ entries }) => entries.forEach(entry => {
+    if (entry.kind === 'apu') addApuSheet(entry.apu, entry.number);
+    else entry.apus.forEach(({ apu, number }) => addApuSheet(apu, number));
+  }));
 
   // 2) Presupuesto
   const rows: any[][] = [
@@ -140,43 +136,42 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
   const R = () => rows.length + 1;
   const chapterTotals: string[] = [];
   let grand = 0;
-  projectChapters.forEach((chap, cIdx) => {
-    const n = cIdx + 1;
-    rows.push([String(n), (chap.name || '').toUpperCase()]);
-    const subchapters = chapters.filter(c => c.parentChapterId === chap.id);
+  outline.forEach(({ chapter: chap, number: n, entries }) => {
+    rows.push([n, (chap.name || '').toUpperCase()]);
+    // Suma por referencias explícitas: subtotales de subcapítulo + partidas propias (nunca las de un subcapítulo dos veces)
     const subtotalCellRefs: string[] = [];
     let chapSum = 0;
 
-    subchapters.forEach((sub, sIdx) => {
-      const subNumber = `${n}.${sIdx + 1}`;
-      const subApus = apus.filter(a => a.chapterId === sub.id);
-      if (subApus.length === 0) return;
-      rows.push(['', `  ${subNumber} ${(sub.name || '').toUpperCase()}`]);
+    // Filas en el orden mezclado del capítulo: partidas propias y subcapítulos intercalados
+    entries.forEach(entry => {
+      if (entry.kind === 'apu') {
+        const apu = entry.apu;
+        const r = R();
+        const ref = puRef.get(apu.id)!;
+        const qty = Number(apu.quantity) || 0;
+        const total = ref.pu * qty;
+        chapSum += total;
+        rows.push([entry.number, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
+        subtotalCellRefs.push(`F${r}`);
+        return;
+      }
+      if (entry.apus.length === 0) return;
+      const subNumber = entry.number;
+      rows.push(['', `  ${subNumber} ${(entry.chapter.name || '').toUpperCase()}`]);
       const subApuCellRefs: string[] = [];
       let subSum = 0;
-      subApus.forEach((apu, aIdx) => {
+      entry.apus.forEach(({ apu, number }) => {
         const r = R();
         const ref = puRef.get(apu.id)!;
         const qty = Number(apu.quantity) || 0;
         const total = ref.pu * qty;
         subSum += total; chapSum += total;
-        rows.push([`${subNumber}.${aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
+        rows.push([number, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
         subApuCellRefs.push(`F${r}`);
       });
       const rSubSub = R();
       rows.push(['', `SUBTOTAL SUBCAPÍTULO ${subNumber}`, '', '', '', fx(subApuCellRefs.length ? subApuCellRefs.join('+') : '0', subSum)]);
       subtotalCellRefs.push(`F${rSubSub}`);
-    });
-
-    const directApus = apus.filter(a => a.chapterId === chap.id);
-    directApus.forEach((apu, aIdx) => {
-      const r = R();
-      const ref = puRef.get(apu.id)!;
-      const qty = Number(apu.quantity) || 0;
-      const total = ref.pu * qty;
-      chapSum += total;
-      rows.push([`${n}.${subchapters.length + aIdx + 1}`, apu.name, apu.unit, num(qty, FMT_QTY), fx(ref.ref, ref.pu), fx(`D${r}*E${r}`, total)]);
-      subtotalCellRefs.push(`F${r}`);
     });
 
     const rSub = R();

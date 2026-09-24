@@ -7,7 +7,7 @@ import QuickCalculator from './components/QuickCalculator';
 import ConfirmationModal from './components/ui/ConfirmationModal';
 import { normalizeApu } from './lib/apuCalculations';
 import { formatNumber } from './lib/number';
-import { getRootChapters, getSubchapters } from './lib/chapters';
+import { buildChapterOutline } from './lib/chapters';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
 import ProjectModal from './components/ProjectModal';
@@ -31,8 +31,8 @@ const safeUUID = () => crypto.randomUUID();
 const App: React.FC = () => {
   const {
     projects, setProjects, reorderProject,
-    chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
-    apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter,
+    chapters, setChapters, addChapter, moveChapter, reorderChapter, moveChildInChapter, deleteChapter,
+    apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter, duplicateApu,
     history, addHistoryItem,
     activeProjectId, setActiveProjectId, loadProject, saveActiveProject,
     deleteProject, duplicateProject, lastSaved,
@@ -73,32 +73,24 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!activeProjectId || chapters.length === 0) return;
 
-    const roots = getRootChapters(chapters, activeProjectId);
-
-    const newChapters = chapters.map(ch => {
-      if (ch.projectId !== activeProjectId) return ch;
-      let newCode: string;
-      if (!ch.parentChapterId) {
-        newCode = (roots.findIndex(c => c.id === ch.id) + 1).toString();
-      } else {
-        const parentIdx = roots.findIndex(c => c.id === ch.parentChapterId);
-        if (parentIdx === -1) return ch; // padre no encontrado (dato corrupto) — no renumerar
-        const siblingIdx = getSubchapters(chapters, ch.parentChapterId).findIndex(s => s.id === ch.id);
-        newCode = `${parentIdx + 1}.${siblingIdx + 1}`;
-      }
-      return ch.code !== newCode ? { ...ch, code: newCode } : ch;
+    // Numeración única (misma que PDF/Excel): capítulo N, hijos N.k en su orden mezclado, partidas de subcapítulo N.k.j
+    const codes = new Map<string, string>();
+    buildChapterOutline(chapters, apus, activeProjectId).forEach(({ chapter, number, entries }) => {
+      codes.set(chapter.id, number);
+      entries.forEach(entry => {
+        if (entry.kind === 'apu') { codes.set(entry.apu.id, entry.number); return; }
+        codes.set(entry.chapter.id, entry.number);
+        entry.apus.forEach(({ apu, number: apuNumber }) => codes.set(apu.id, apuNumber));
+      });
     });
 
+    const newChapters = chapters.map(ch => {
+      const newCode = codes.get(ch.id);
+      return newCode !== undefined && ch.code !== newCode ? { ...ch, code: newCode } : ch;
+    });
     const newApus = apus.map(apu => {
-      if (apu.projectId !== activeProjectId) return apu;
-      const ch = newChapters.find(c => c.id === apu.chapterId);
-      if (!ch) return apu;
-      const siblings = apus.filter(a => a.chapterId === apu.chapterId);
-      const idx = siblings.findIndex(s => s.id === apu.id);
-      // las partidas directas de un capítulo raíz se numeran después de sus subcapítulos
-      const offset = ch.parentChapterId ? 0 : getSubchapters(newChapters, ch.id).length;
-      const newCode = `${ch.code}.${offset + idx + 1}`;
-      return apu.code !== newCode ? { ...apu, code: newCode } : apu;
+      const newCode = codes.get(apu.id);
+      return newCode !== undefined && apu.code !== newCode ? { ...apu, code: newCode } : apu;
     });
 
     if (JSON.stringify(newChapters) !== JSON.stringify(chapters)) setChapters(newChapters);
@@ -385,12 +377,13 @@ const App: React.FC = () => {
         onNewSubchapter={(projectId, parentChapterId) => setChapterModalContext({ projectId, parentChapterId })}
         onLibraryOpen={setLibraryChapterId}
         onCreateApu={handleCreateApu}
-        onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; const i = apus.findIndex(x => x.id === a.id); const next = [...apus]; next.splice(i + 1, 0, dup); setApus(next); }}
+        onDuplicateApu={(a) => duplicateApu(a, safeUUID())}
         onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
         moveApuToChapter={moveApuToChapter}
+        moveChildInChapter={moveChildInChapter}
         onRenameChapter={(id, name) => setChapters(prev => prev.map(c => c.id === id ? { ...c, name } : c))}
       />
 

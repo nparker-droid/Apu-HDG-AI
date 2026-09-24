@@ -48,6 +48,11 @@ export interface Chapter {
   name: string;
   /** Capítulo padre — ausente/undefined = capítulo raíz. Un capítulo con parentChapterId no puede tener hijos (un solo nivel). */
   parentChapterId?: string;
+  /**
+   * Solo capítulos raíz: orden mezclado de sus hijos directos (ids de partidas propias y de subcapítulos).
+   * Ausente = orden heredado (subcapítulos primero, luego partidas). Ids faltantes se agregan al final.
+   */
+  childOrder?: string[];
 }
 
 export interface Project {

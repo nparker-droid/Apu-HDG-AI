@@ -4,7 +4,7 @@ import { Plus, X, ChevronRight, Search, Trash2, ChevronUp, ChevronDown, Copy, Ed
 import { cn } from '../../lib/utils';
 import { Project, Chapter, APU } from '../../types';
 import { formatMonthYear } from '../../lib/date';
-import { getRootChapters, getSubchapters } from '../../lib/chapters';
+import { getRootChapters, getSubchapters, getChapterChildren } from '../../lib/chapters';
 import ConfirmationModal from '../ui/ConfirmationModal';
 
 const normKey = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -48,7 +48,8 @@ interface SidebarProps {
     onDeleteProject: (id: string) => void;
     onDuplicateProject: (id: string) => void;
     moveApu: (id: string, dir: 'up' | 'down') => void;
-    moveApuToChapter: (apuId: string, toChapterId: string, beforeApuId: string | null) => void;
+    moveApuToChapter: (apuId: string, toChapterId: string, beforeId: string | null) => void;
+    moveChildInChapter: (parentId: string, childId: string, beforeId: string | null) => void;
     onRenameChapter: (id: string, name: string) => void;
 }
 
@@ -60,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onNewProject, onEditProject, onNewChapter, onNewSubchapter,
     onLibraryOpen, onCreateApu, onDuplicateApu, onDeleteApu,
     onDeleteProject, onDuplicateProject,
-    moveApu, moveApuToChapter, onRenameChapter
+    moveApu, moveApuToChapter, moveChildInChapter, onRenameChapter
 }) => {
     const [search, setSearch] = useState('');
     const term = normKey(search);
@@ -111,33 +112,45 @@ const Sidebar: React.FC<SidebarProps> = ({
         setConfirmDelete(null);
     };
 
-    const renderChapterBlock = (project: Project, chapter: Chapter, isSubchapter: boolean, extraContent?: React.ReactNode) => {
-        const chapterApus = apus.filter(a => a.chapterId === chapter.id && (!term || matchesText(a.name) || matchesText(a.code)));
+    const draggedChapter = draggedChapterId ? chapters.find(c => c.id === draggedChapterId) || null : null;
+    const resetDrag = () => { setDraggedApuId(null); setDraggedChapterId(null); setDragOver(null); setDragOverChapterId(null); };
+
+    const renderChapterBlock = (project: Project, chapter: Chapter, isSubchapter: boolean) => {
+        // Hijos en orden mezclado: en un capítulo raíz, partidas propias y subcapítulos intercalados
+        const children = getChapterChildren(chapter, chapters, apus).filter(child =>
+            !term || (child.kind === 'apu' ? matchesText(child.apu.name) || matchesText(child.apu.code) : chapterMatchesSearch(child.chapter)));
+        const apuCount = children.reduce((n, child) => n + (child.kind === 'apu' ? 1 : apus.filter(a => a.chapterId === child.chapter.id).length), 0);
+        // Un subcapítulo de ESTE capítulo se está arrastrando: puede soltarse antes de una partida propia o al final
+        const draggingOwnSub = !!draggedChapter && draggedChapter.parentChapterId === chapter.id;
+        // Reordenar capítulos solo entre hermanos del mismo nivel
+        const chapterDropAllowed = !!draggedChapter && draggedChapter.id !== chapter.id && (draggedChapter.parentChapterId ?? null) === (chapter.parentChapterId ?? null);
         return (
-            <div key={chapter.id} className={cn("space-y-1 relative", isSubchapter && "ml-4 pl-2 border-l-2 border-brand-blue/10")}>
-                {dragOverChapterId === chapter.id && draggedChapterId !== null && draggedChapterId !== chapter.id && (
+            <div
+                key={chapter.id}
+                className={cn("space-y-1 relative", isSubchapter && "ml-4 pl-2 border-l-2 border-brand-blue/10")}
+                onDragOver={(e) => { if (draggedChapterId === chapter.id) e.stopPropagation(); }}
+            >
+                {dragOverChapterId === chapter.id && chapterDropAllowed && (
                     <div className="h-0.5 bg-brand-blue rounded-full mx-1 mb-1" />
                 )}
                 <div
                     draggable
-                    onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
-                    onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); setDragOver(null); }}
+                    onDragStart={(e) => { e.stopPropagation(); setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragEnd={resetDrag}
                     onDragOver={(e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        if (draggedApuId) { setDragOver({ chapterId: chapter.id, apuId: null }); return; }
-                        if (draggedChapterId && draggedChapterId !== chapter.id) setDragOverChapterId(chapter.id);
+                        if (draggedApuId) { e.preventDefault(); e.stopPropagation(); setDragOver({ chapterId: chapter.id, apuId: null }); return; }
+                        if (chapterDropAllowed) { e.preventDefault(); e.stopPropagation(); setDragOverChapterId(chapter.id); }
                     }}
                     onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation();
                         if (draggedApuId) {
                             // Soltar una partida sobre el encabezado la mueve al final de este capítulo/subcapítulo
+                            e.preventDefault(); e.stopPropagation();
                             moveApuToChapter(draggedApuId, chapter.id, null);
                             setCollapsedChapters(prev => ({ ...prev, [chapter.id]: false }));
-                            setDraggedApuId(null); setDragOver(null);
+                            resetDrag();
                             return;
                         }
-                        if (draggedChapterId && draggedChapterId !== chapter.id) reorderChapter(draggedChapterId, chapter.id);
-                        setDraggedChapterId(null); setDragOverChapterId(null);
+                        if (chapterDropAllowed) { e.preventDefault(); e.stopPropagation(); reorderChapter(draggedChapterId!, chapter.id); resetDrag(); }
                     }}
                     className={cn(
                         "flex flex-col p-2 rounded-xl space-y-2 group/chapter select-none transition-all",
@@ -233,19 +246,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )}
                     </div>
                 )}
-                {extraContent}
                 <div
                     className="space-y-0.5"
-                    onDragOver={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
-                    onDrop={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); }}
+                    onDragOver={(e) => { if (!draggedApuId && !draggingOwnSub) return; e.preventDefault(); e.stopPropagation(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
+                    onDrop={(e) => {
+                        if (!draggedApuId && !draggingOwnSub) return;
+                        e.preventDefault(); e.stopPropagation();
+                        if (draggedApuId) moveApuToChapter(draggedApuId, chapter.id, null);
+                        if (draggingOwnSub) moveChildInChapter(chapter.id, draggedChapterId!, null);
+                        resetDrag();
+                    }}
                 >
-                    {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
+                    {collapsedChapters[chapter.id] && children.length > 0 && (
                         <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
-                            {chapterApus.length} partida(s) — contraído
+                            {apuCount} partida(s) — contraído
                         </div>
                     )}
                     {/* Siempre presente (no solo durante el arrastre): insertar nodos en dragstart desplaza la fila arrastrada y Chrome cancela el arrastre */}
-                    {!term && !collapsedChapters[chapter.id] && chapterApus.length === 0 && !extraContent && (
+                    {!term && !collapsedChapters[chapter.id] && children.length === 0 && (
                         <div className={cn(
                             "px-2 py-2 rounded-xl border border-dashed text-center text-[8px] font-semibold uppercase tracking-widest transition-colors",
                             draggedApuId && dragOver?.chapterId === chapter.id ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-border text-muted-light'
@@ -253,48 +271,63 @@ const Sidebar: React.FC<SidebarProps> = ({
                             Sin partidas — arrastra aquí
                         </div>
                     )}
-                    {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
-                        <div key={apu.id}>
-                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId && draggedApuId !== apu.id && (
-                                <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
-                            )}
-                            <div
-                                draggable
-                                onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
-                                onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
-                                onDragOver={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
-                                onDrop={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); }}
-                                onClick={() => setCurrentApuId(apu.id)}
-                                className={cn(
-                                    "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
-                                    draggedApuId === apu.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
-                                    currentApuId === apu.id ? 'bg-brand-green text-white' : 'hover:bg-sidebar text-muted-dark'
+                    {!collapsedChapters[chapter.id] && children.map(child => child.kind === 'sub' ? (
+                        <div key={child.id} className="py-0.5">{renderChapterBlock(project, child.chapter, true)}</div>
+                    ) : (() => {
+                        const apu = child.apu;
+                        return (
+                            <div key={apu.id}>
+                                {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && ((draggedApuId && draggedApuId !== apu.id) || draggingOwnSub) && (
+                                    <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
                                 )}
-                            >
-                                <span className="pr-2 font-semibold whitespace-normal break-words leading-tight">
-                                    {(() => { const pr = projects.find(p => p.id === apu.projectId); return pr && getZeroCostInfo(apu, pr).isZero ? <span title="Costos en $0 — falta completar" className="inline-block w-1.5 h-1.5 rounded-full bg-status-red mr-1.5 align-middle" /> : null; })()}
-                                    {apu.flagged && <span title="Partida marcada" className="inline-block w-1.5 h-1.5 rounded-full bg-status-amber mr-1.5 align-middle" />}
-                                    {apu.code} {apu.name}</span>
-                                <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
-                                    <div className="flex flex-col mr-1">
-                                        <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                <div
+                                    draggable
+                                    onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
+                                    onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
+                                    onDragOver={(e) => {
+                                        if (!draggedApuId && !draggingOwnSub) return;
+                                        e.preventDefault(); e.stopPropagation();
+                                        if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id });
+                                    }}
+                                    onDrop={(e) => {
+                                        if (!draggedApuId && !draggingOwnSub) return;
+                                        e.preventDefault(); e.stopPropagation();
+                                        if (draggedApuId && draggedApuId !== apu.id) moveApuToChapter(draggedApuId, chapter.id, apu.id);
+                                        if (draggingOwnSub) moveChildInChapter(chapter.id, draggedChapterId!, apu.id);
+                                        resetDrag();
+                                    }}
+                                    onClick={() => setCurrentApuId(apu.id)}
+                                    className={cn(
+                                        "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
+                                        draggedApuId === apu.id ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
+                                        currentApuId === apu.id ? 'bg-brand-green text-white' : 'hover:bg-sidebar text-muted-dark'
+                                    )}
+                                >
+                                    <span className="pr-2 font-semibold whitespace-normal break-words leading-tight">
+                                        {(() => { const pr = projects.find(p => p.id === apu.projectId); return pr && getZeroCostInfo(apu, pr).isZero ? <span title="Costos en $0 — falta completar" className="inline-block w-1.5 h-1.5 rounded-full bg-status-red mr-1.5 align-middle" /> : null; })()}
+                                        {apu.flagged && <span title="Partida marcada" className="inline-block w-1.5 h-1.5 rounded-full bg-status-amber mr-1.5 align-middle" />}
+                                        {apu.code} {apu.name}</span>
+                                    <div className="flex gap-1 opacity-0 group-hover/apu:opacity-100 transition-opacity items-center">
+                                        <div className="flex flex-col mr-1">
+                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'up'); }} className="hover:text-white p-0.5"><ChevronUp className="w-2.5 h-2.5" /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); moveApu(apu.id, 'down'); }} className="hover:text-white p-0.5"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-brand-blue"><Copy className="w-3 h-3" /></button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
+                                            }}
+                                            className="p-1 hover:text-status-red"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
                                     </div>
-                                    <button onClick={(e) => { e.stopPropagation(); onDuplicateApu(apu); }} className="p-1 hover:text-brand-blue"><Copy className="w-3 h-3" /></button>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setConfirmDelete({ type: 'apu', id: apu.id, name: apu.name });
-                                        }}
-                                        className="p-1 hover:text-status-red"
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                    {dragOver?.chapterId === chapter.id && dragOver?.apuId === null && draggedApuId !== null && (
+                        );
+                    })())}
+                    {dragOver?.chapterId === chapter.id && dragOver?.apuId === null && (draggedApuId !== null || draggingOwnSub) && (
                         <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
                     )}
                 </div>
@@ -422,16 +455,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                         {currentProjectId === project.id && (
                             <div className="ml-5 pl-3 border-l-2 border-brand-blue/20 space-y-4 py-2 animate-in slide-in-from-left-2">
-                                {getRootChapters(chapters, project.id).filter(c => !term || chapterMatchesSearch(c)).map(chapter => {
-                                    const subchapterContent = getSubchapters(chapters, chapter.id).filter(s => !term || chapterMatchesSearch(s)).length > 0 && (
-                                        <div className="space-y-1">
-                                            {getSubchapters(chapters, chapter.id).filter(s => !term || chapterMatchesSearch(s)).map(sub => (
-                                                <div key={sub.id}>{renderChapterBlock(project, sub, true)}</div>
-                                            ))}
-                                        </div>
-                                    );
-                                    return <div key={chapter.id}>{renderChapterBlock(project, chapter, false, subchapterContent)}</div>;
-                                })}
+                                {getRootChapters(chapters, project.id).filter(c => !term || chapterMatchesSearch(c)).map(chapter => (
+                                    <div key={chapter.id}>{renderChapterBlock(project, chapter, false)}</div>
+                                ))}
                                 {draggedChapterId && (
                                     <div
                                         onDragOver={(e) => { e.preventDefault(); setDragOverChapterId('__end__'); }}
