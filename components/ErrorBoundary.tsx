@@ -20,16 +20,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-screen flex items-center justify-center bg-[#F1F5F9] p-8">
-          <div className="text-center space-y-4 max-w-md bg-white p-10 rounded-[2rem] shadow-2xl border border-slate-100">
-            <h2 className="text-2xl font-black text-[#004071] uppercase tracking-tighter">Error inesperado</h2>
-            <p className="text-sm text-slate-500 font-mono bg-slate-50 p-3 rounded-lg text-left break-all">
+        <div className="h-screen flex items-center justify-center bg-surface p-8">
+          <div className="text-center space-y-4 max-w-md bg-white p-10 rounded-2xl shadow-sm border border-border">
+            <h2 className="text-2xl font-bold text-brand-blue uppercase tracking-tighter">Error inesperado</h2>
+            <p className="text-sm text-muted-dark font-mono bg-sidebar p-3 rounded-lg text-left break-all">
               {this.state.error?.message || 'Error desconocido'}
             </p>
-            <p className="text-xs text-slate-400">Tus datos están guardados en localStorage. Puedes recargar la app de forma segura.</p>
+            <p className="text-xs text-muted">Tus datos están guardados en localStorage. Puedes recargar la app de forma segura.</p>
             <button
               onClick={() => window.location.reload()}
-              className="bg-[#004071] text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#002D50] transition-all"
+              className="bg-brand-blue text-white px-8 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-brand-blue-dark transition-all"
             >
               Recargar aplicación
             </button>

@@ -6,8 +6,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#004071",
-  "background_color": "#0f172a",
+  "theme_color": "#1D5A82",
+  "background_color": "#FBFBFC",
   "icons": [
     {
       "src": "/icons/apu-16.png",

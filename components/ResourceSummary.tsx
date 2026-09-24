@@ -140,33 +140,33 @@ const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApu
           const total = groupsByCat[cat].reduce((s, g) => s + g.totalCost, 0);
           const pct = projectDirectCost > 0 ? total / projectDirectCost * 100 : 0;
           return (
-            <button key={cat} onClick={() => setCategory(cat)} className={`text-left p-4 rounded-2xl border transition-all ${category === cat ? 'bg-[#004071] text-white border-[#004071] shadow-lg' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-              <p className={`text-[9px] font-black uppercase tracking-widest ${category === cat ? 'text-white/70' : 'text-slate-400'}`}>{cat}</p>
-              <p className="text-lg font-black font-mono mt-1">{formatCLP(total)}</p>
-              <div className={`flex justify-between text-[9px] font-bold mt-1 ${category === cat ? 'text-white/60' : 'text-slate-400'}`}>
+            <button key={cat} onClick={() => setCategory(cat)} className={`text-left p-4 rounded-2xl border transition-all ${category === cat ? 'bg-brand-blue text-white border-brand-blue' : 'bg-white border-border hover:border-muted-light'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest ${category === cat ? 'text-white/70' : 'text-muted'}`}>{cat}</p>
+              <p className="text-lg font-bold font-mono mt-1">{formatCLP(total)}</p>
+              <div className={`flex justify-between text-[9px] font-bold mt-1 ${category === cat ? 'text-white/60' : 'text-muted'}`}>
                 <span>{groupsByCat[cat].length} recursos · {formatNumber(pct, 1, 1)}% CD</span>
-                {diffCount(cat) > 0 && <span className={category === cat ? 'text-amber-300' : 'text-amber-500'}>{diffCount(cat)} con diferencias</span>}
+                {diffCount(cat) > 0 && <span className={category === cat ? 'text-amber-300' : 'text-status-amber'}>{diffCount(cat)} con diferencias</span>}
               </div>
             </button>
           );
         })}
       </div>
 
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex flex-wrap gap-4 justify-between items-center">
+      <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
+        <div className="p-6 border-b border-border bg-sidebar/50 flex flex-wrap gap-4 justify-between items-center">
           <div>
-            <h3 className="text-sm font-black text-[#004071] uppercase tracking-tighter">Resumen de {category}</h3>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+            <h3 className="text-sm font-bold text-brand-blue uppercase tracking-tighter">Resumen de {category}</h3>
+            <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-1">
               Costo directo en proyecto (Σ línea × cant. partida){category === ItemCategory.MANO_DE_OBRA ? ', sin leyes sociales' : ''}: {formatCLP(catTotal)}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-500 cursor-pointer">
-              <input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} className="accent-[#004071]" /> Solo con diferencias
+            <label className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-muted-dark cursor-pointer">
+              <input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} className="accent-brand-blue" /> Solo con diferencias
             </label>
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar recurso…" className="pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-[#004071] w-56" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-light" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar recurso…" className="pl-8 pr-3 py-2 rounded-xl border border-border text-xs outline-none focus:border-brand-blue w-56" />
             </div>
           </div>
         </div>
@@ -174,7 +174,7 @@ const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApu
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-100/50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              <tr className="bg-sidebar/50 text-[9px] font-bold text-muted uppercase tracking-widest">
                 <th className="px-4 py-3 w-8"></th>
                 <th className="px-4 py-3">Recurso</th>
                 <th className="px-4 py-3 text-center">Unid.</th>
@@ -187,69 +187,69 @@ const ResourceSummary: React.FC<Props> = ({ project, chapters, apus, onUpdateApu
             </thead>
             <tbody>
               {groups.length === 0 && (
-                <tr><td colSpan={8} className="px-8 py-10 text-center text-xs text-slate-400 italic">Sin recursos {onlyDiff ? 'con diferencias ' : ''}en esta categoría.</td></tr>
+                <tr><td colSpan={8} className="px-8 py-10 text-center text-xs text-muted italic">Sin recursos {onlyDiff ? 'con diferencias ' : ''}en esta categoría.</td></tr>
               )}
               {groups.map(g => {
                 const isOpen = !!expanded[g.key];
                 const diff = g.hasPriceDiff || g.hasUnitDiff;
                 return (
                   <React.Fragment key={g.key}>
-                    <tr className={`border-b border-slate-100 hover:bg-slate-50/50 ${diff ? 'bg-amber-50/30' : ''}`}>
+                    <tr className={`border-b border-border hover:bg-sidebar/50 ${diff ? 'bg-status-amber/5' : ''}`}>
                       <td className="px-4 py-3">
-                        <button onClick={() => setExpanded(p => ({ ...p, [g.key]: !isOpen }))} className="text-slate-400 hover:text-[#004071]">
+                        <button onClick={() => setExpanded(p => ({ ...p, [g.key]: !isOpen }))} className="text-muted hover:text-brand-blue">
                           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-xs font-bold text-slate-700">
+                      <td className="px-4 py-3 text-xs font-bold text-ink">
                         <div className="flex items-center gap-2">
-                          {diff && <span title={`${g.hasPriceDiff ? 'Precios distintos' : ''}${g.hasPriceDiff && g.hasUnitDiff ? ' y ' : ''}${g.hasUnitDiff ? 'unidades distintas' : ''}`}><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></span>}
+                          {diff && <span title={`${g.hasPriceDiff ? 'Precios distintos' : ''}${g.hasPriceDiff && g.hasUnitDiff ? ' y ' : ''}${g.hasUnitDiff ? 'unidades distintas' : ''}`}><AlertTriangle className="w-3.5 h-3.5 text-status-amber" /></span>}
                           {g.description}
                         </div>
                       </td>
-                      <td className={`px-4 py-3 text-[10px] text-center ${g.hasUnitDiff ? 'text-amber-600 font-black' : 'text-slate-500'}`}>{g.units.join(' / ')}</td>
-                      <td className="px-4 py-3 text-[10px] text-center text-slate-500 font-mono">{g.occurrences.length}</td>
-                      <td className={`px-4 py-3 text-[10px] text-right font-mono ${g.hasPriceDiff ? 'text-amber-600 font-black' : 'text-slate-500'}`}>
+                      <td className={`px-4 py-3 text-[10px] text-center ${g.hasUnitDiff ? 'text-status-amber font-bold' : 'text-muted-dark'}`}>{g.units.join(' / ')}</td>
+                      <td className="px-4 py-3 text-[10px] text-center text-muted-dark font-mono">{g.occurrences.length}</td>
+                      <td className={`px-4 py-3 text-[10px] text-right font-mono ${g.hasPriceDiff ? 'text-status-amber font-bold' : 'text-muted-dark'}`}>
                         {g.hasPriceDiff ? `${formatCLP(g.min)} – ${formatCLP(g.max)}` : formatCLP(g.min)}
                         {g.hasPriceDiff && g.min > 0 && <span className="block text-[9px] font-bold">Δ {formatNumber((g.max / g.min - 1) * 100, 0, 1)}%</span>}
                       </td>
-                      <td className="px-4 py-3 text-[10px] text-right font-mono text-slate-500">{formatCLP(g.weightedAvg)}</td>
-                      <td className="px-4 py-3 text-xs text-right font-mono font-bold text-slate-700">{formatCLP(g.totalCost)}</td>
+                      <td className="px-4 py-3 text-[10px] text-right font-mono text-muted-dark">{formatCLP(g.weightedAvg)}</td>
+                      <td className="px-4 py-3 text-xs text-right font-mono font-bold text-ink">{formatCLP(g.totalCost)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-[10px] text-slate-400">$</span>
+                          <span className="text-[10px] text-muted">$</span>
                           <NumberInput
                             mode="money"
                             maxDecimals={2}
                             value={unifyPrice[g.key] ?? Math.round(g.hasPriceDiff ? g.weightedAvg : g.min)}
                             onValueChange={v => setUnifyPrice(p => ({ ...p, [g.key]: v }))}
-                            className="w-24 text-right font-mono text-xs font-black text-[#004071] bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 outline-none focus:border-[#004071]"
+                            className="w-24 text-right font-mono text-xs font-bold text-brand-blue bg-sidebar border border-border rounded-lg px-2 py-1 outline-none focus:border-brand-blue"
                           />
-                          <button onClick={() => unify(g)} title="Aplicar este precio a todas las líneas del recurso" className="p-1.5 rounded-lg bg-[#88C13E] text-white hover:bg-[#76a935]"><Check className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => unify(g)} title="Aplicar este precio a todas las líneas del recurso" className="p-1.5 rounded-lg bg-brand-green text-white hover:bg-brand-green-dark"><Check className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     </tr>
                     {isOpen && g.occurrences.map(o => (
-                      <tr key={o.itemId} className="bg-slate-50/60 border-b border-slate-100 text-[10px]">
+                      <tr key={o.itemId} className="bg-sidebar/60 border-b border-border text-[10px]">
                         <td></td>
-                        <td className="px-4 py-2 text-slate-500">
-                          <button onClick={() => onOpenApu(o.apu.id)} className="hover:text-[#004071] hover:underline text-left">
+                        <td className="px-4 py-2 text-muted-dark">
+                          <button onClick={() => onOpenApu(o.apu.id)} className="hover:text-brand-blue hover:underline text-left">
                             <span className="font-mono font-bold mr-2">{o.apu.code}</span>{o.apu.name}
                           </button>
-                          {o.note && <span className="flex items-center gap-1 text-amber-600 mt-0.5"><StickyNote className="w-3 h-3" /> {o.note}</span>}
+                          {o.note && <span className="flex items-center gap-1 text-status-amber mt-0.5"><StickyNote className="w-3 h-3" /> {o.note}</span>}
                         </td>
-                        <td className="px-4 py-2 text-center text-slate-500">{formatUnit(o.unit) || '—'}</td>
-                        <td className="px-4 py-2 text-center font-mono text-slate-400" title={amountLabel}>{formatNumber(o.amount, 0, 4)}</td>
+                        <td className="px-4 py-2 text-center text-muted-dark">{formatUnit(o.unit) || '—'}</td>
+                        <td className="px-4 py-2 text-center font-mono text-muted" title={amountLabel}>{formatNumber(o.amount, 0, 4)}</td>
                         <td className="px-4 py-2 text-right">
                           <NumberInput
                             mode="money"
                             maxDecimals={2}
                             value={o.unitPrice}
                             onValueChange={v => applyToGroup(g, { unitPrice: v }, new Set([occKey(o.apu.id, o.itemId)]))}
-                            className={`w-24 text-right font-mono text-[10px] font-bold bg-white border rounded-lg px-2 py-1 outline-none focus:border-[#004071] ${g.hasPriceDiff && o.unitPrice !== g.max ? 'text-slate-600 border-slate-200' : g.hasPriceDiff ? 'text-amber-600 border-amber-200' : 'text-slate-600 border-slate-200'}`}
+                            className={`w-24 text-right font-mono text-[10px] font-bold bg-white border rounded-lg px-2 py-1 outline-none focus:border-brand-blue ${g.hasPriceDiff && o.unitPrice !== g.max ? 'text-muted-dark border-border' : g.hasPriceDiff ? 'text-status-amber border-status-amber/40' : 'text-muted-dark border-border'}`}
                           />
                         </td>
                         <td></td>
-                        <td className="px-4 py-2 text-right font-mono text-slate-500">{formatCLP(o.projectCost)}</td>
+                        <td className="px-4 py-2 text-right font-mono text-muted-dark">{formatCLP(o.projectCost)}</td>
                         <td></td>
                       </tr>
                     ))}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Share2, FileText, Table, FileInput, FileOutput } from 'lucide-react';
 import { useAppStore, STORAGE_ERROR_EVENT, getStorageUsage, STORAGE_QUOTA_BYTES } from './store/useAppStore';
 import ResourceSummary from './components/ResourceSummary';
 import ProjectSheet from './components/ProjectSheet';
@@ -7,6 +7,7 @@ import QuickCalculator from './components/QuickCalculator';
 import ConfirmationModal from './components/ui/ConfirmationModal';
 import { normalizeApu } from './lib/apuCalculations';
 import { formatNumber } from './lib/number';
+import { getRootChapters, getSubchapters } from './lib/chapters';
 import Sidebar from './components/Layout/Sidebar';
 import APUEditor from './components/APUEditor';
 import ProjectModal from './components/ProjectModal';
@@ -15,6 +16,7 @@ import LibraryModal from './components/LibraryModal';
 import ProjectGeneralView from './components/ProjectGeneralView';
 import HelpModal from './components/HelpModal';
 import { exportProjectToExcel } from './services/excelExportService';
+import { exportProjectToPDF, exportBudgetToPDF } from './services/exportService';
 import { saveBlobWithPicker } from './services/fileSaveService';
 import { Project, APU, Chapter, ItemCategory } from './types';
 import { Toaster, toast } from 'sonner';
@@ -28,7 +30,7 @@ const safeUUID = () => crypto.randomUUID();
 
 const App: React.FC = () => {
   const {
-    projects, setProjects,
+    projects, setProjects, reorderProject,
     chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
@@ -44,9 +46,11 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [chapterModalProjectId, setChapterModalProjectId] = useState<string | null>(null);
+  const [chapterModalContext, setChapterModalContext] = useState<{ projectId: string; parentChapterId?: string } | null>(null);
   const [libraryChapterId, setLibraryChapterId] = useState<string | null>(null);
   const [isUserLibraryOpen, setIsUserLibraryOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [driveConnected, setDriveConnected] = useState(false);
@@ -69,12 +73,19 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!activeProjectId || chapters.length === 0) return;
 
-    const projectChapters = chapters.filter(c => c.projectId === activeProjectId);
+    const roots = getRootChapters(chapters, activeProjectId);
 
     const newChapters = chapters.map(ch => {
       if (ch.projectId !== activeProjectId) return ch;
-      const idx = projectChapters.findIndex(c => c.id === ch.id);
-      const newCode = (idx + 1).toString();
+      let newCode: string;
+      if (!ch.parentChapterId) {
+        newCode = (roots.findIndex(c => c.id === ch.id) + 1).toString();
+      } else {
+        const parentIdx = roots.findIndex(c => c.id === ch.parentChapterId);
+        if (parentIdx === -1) return ch; // padre no encontrado (dato corrupto) — no renumerar
+        const siblingIdx = getSubchapters(chapters, ch.parentChapterId).findIndex(s => s.id === ch.id);
+        newCode = `${parentIdx + 1}.${siblingIdx + 1}`;
+      }
       return ch.code !== newCode ? { ...ch, code: newCode } : ch;
     });
 
@@ -84,7 +95,9 @@ const App: React.FC = () => {
       if (!ch) return apu;
       const siblings = apus.filter(a => a.chapterId === apu.chapterId);
       const idx = siblings.findIndex(s => s.id === apu.id);
-      const newCode = `${ch.code}.${idx + 1}`;
+      // las partidas directas de un capítulo raíz se numeran después de sus subcapítulos
+      const offset = ch.parentChapterId ? 0 : getSubchapters(newChapters, ch.id).length;
+      const newCode = `${ch.code}.${offset + idx + 1}`;
       return apu.code !== newCode ? { ...apu, code: newCode } : apu;
     });
 
@@ -98,6 +111,14 @@ const App: React.FC = () => {
       setDriveConnected(connected);
     });
   }, []);
+
+  // Cierra el menú de Exportar al hacer clic fuera
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const onDown = (e: MouseEvent) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setIsExportMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [isExportMenuOpen]);
 
   // Monitoreo de almacenamiento local: aviso si falla la escritura o se acerca al límite
   useEffect(() => {
@@ -341,12 +362,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-[#F1F5F9] overflow-hidden">
+    <div className="flex h-screen bg-surface overflow-hidden">
       <Toaster position="top-right" richColors />
 
       <Sidebar
         isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen}
         projects={projects} chapters={chapters} apus={apus}
+        reorderProject={reorderProject}
         reorderChapter={reorderChapter} deleteChapter={deleteChapter}
         currentProjectId={activeProjectId}
         setCurrentProjectId={(id) => {
@@ -358,15 +380,13 @@ const App: React.FC = () => {
         currentApuId={currentApuId}
         setCurrentApuId={(id) => { if (id !== currentApuId) setCurrentApuId(id); }}
         onNewProject={() => { setEditingProject(null); setIsProjectModalOpen(true); }}
-        onUserLibraryOpen={() => setIsUserLibraryOpen(true)}
         onEditProject={(p) => { setEditingProject(p); setIsProjectModalOpen(true); }}
-        onNewChapter={() => activeProjectId && setChapterModalProjectId(activeProjectId)}
+        onNewChapter={() => activeProjectId && setChapterModalContext({ projectId: activeProjectId })}
+        onNewSubchapter={(projectId, parentChapterId) => setChapterModalContext({ projectId, parentChapterId })}
         onLibraryOpen={setLibraryChapterId}
         onCreateApu={handleCreateApu}
         onDuplicateApu={(a) => { const dup = { ...JSON.parse(JSON.stringify(a)), id: safeUUID(), createdAt: Date.now() }; const i = apus.findIndex(x => x.id === a.id); const next = [...apus]; next.splice(i + 1, 0, dup); setApus(next); }}
         onDeleteApu={(id) => { deleteApu(id); if (currentApuId === id) setCurrentApuId(null); }}
-        onShareProject={handleShareProject}
-        handleImport={handleImport}
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
         moveApu={moveApu}
@@ -374,18 +394,18 @@ const App: React.FC = () => {
         onRenameChapter={(id, name) => setChapters(prev => prev.map(c => c.id === id ? { ...c, name } : c))}
       />
 
-      <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-slate-50">
+      <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-surface">
         {activeProject ? (
           <>
-            <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+            <header className="sticky top-0 z-40 bg-white border-b border-border px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
-                {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"><Menu className="w-5 h-5" /></button>}
+                {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
                 <div className="min-w-0">
-                  <h2 className="text-lg font-black text-[#004071] uppercase max-w-2xl whitespace-normal break-words leading-tight">
+                  <h2 className="text-lg font-bold text-brand-blue uppercase max-w-2xl whitespace-normal break-words leading-tight">
                     {activeApu ? activeApu.name : projectView === 'resources' ? `RESUMEN DE RECURSOS: ${activeProject.name}` : projectView === 'sheet' ? `HOJA DE CÁLCULO: ${activeProject.name}` : `ESTRUCTURA GENERAL: ${activeProject.name}`}
                   </h2>
                   <div className="flex items-center gap-3">
-                    <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name}</p>
+                    <p className="text-[9px] text-brand-green font-bold uppercase tracking-widest">{activeProject.name}</p>
                   </div>
                 </div>
               </div>
@@ -393,39 +413,47 @@ const App: React.FC = () => {
                 {storagePct >= 60 && (
                   <span
                     title={`Almacenamiento local usado: ${formatNumber(storageUsage / 1024 / 1024, 1, 1)} MB de ~5 MB. Respalde en Drive o exporte y elimine proyectos antiguos.`}
-                    className={`hidden md:flex items-center gap-1 text-[8px] font-black uppercase px-3 py-2 rounded-xl whitespace-nowrap ${storagePct >= 85 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}
+                    className={`hidden md:flex items-center gap-1 text-[8px] font-bold uppercase px-3 py-2 rounded-xl whitespace-nowrap ${storagePct >= 85 ? 'bg-status-red/10 text-status-red' : 'bg-status-amber/10 text-status-amber'}`}
                   >
                     <HardDrive className="w-3 h-3" /> {formatNumber(storagePct, 0, 0)}%
                   </span>
                 )}
                 {lastSaved && (
-                  <span className="hidden md:flex items-center gap-1 text-[8px] text-slate-500 font-black uppercase bg-slate-100 px-3 py-2 rounded-xl whitespace-nowrap">
-                    <Clock className="w-3 h-3 text-[#88C13E]" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
+                  <span className="hidden md:flex items-center gap-1 text-[8px] text-muted-dark font-bold uppercase bg-sidebar px-3 py-2 rounded-xl whitespace-nowrap">
+                    <Clock className="w-3 h-3 text-brand-green" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
                   </span>
                 )}
+
+                <label
+                  title="Importar proyecto (.json)"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer text-[9px] font-bold uppercase tracking-widest"
+                >
+                  <FileInput className="w-4 h-4" /> Importar
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
 
                 {/* Google Drive — botón único con hover card */}
                 <div className="relative group/drive">
                   <button
                     onClick={driveConnected ? undefined : handleDriveConnect}
                     disabled={driveStatus === 'syncing'}
-                    className={`flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl uppercase tracking-widest transition-all disabled:opacity-60 select-none ${
+                    title={driveConnected ? 'Conectado a Google Drive' : 'Conectar Google Drive'}
+                    className={`relative p-2 rounded-xl transition-all disabled:opacity-60 select-none ${
                       driveConnected
-                        ? 'bg-blue-50 text-blue-600 cursor-default'
-                        : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 cursor-pointer'
+                        ? 'bg-brand-blue/10 text-brand-blue cursor-default'
+                        : 'text-muted hover:bg-sidebar hover:text-brand-blue cursor-pointer'
                     }`}
                   >
                     {driveStatus === 'syncing'
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
                       : driveStatus === 'synced'
-                        ? <Check className="w-3 h-3 text-green-500" />
-                        : <CloudUpload className="w-3 h-3" />}
-                    Drive
-                    {driveConnected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 ml-0.5" />}
+                        ? <Check className="w-4 h-4 text-brand-green" />
+                        : <CloudUpload className="w-4 h-4" />}
+                    {driveConnected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-green" />}
                   </button>
 
                   {/* Hover card con acciones y ubicación */}
-                  <div className="absolute right-0 top-full mt-2 w-60 bg-slate-900 text-white rounded-2xl shadow-2xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
+                  <div className="absolute right-0 top-full mt-2 w-60 bg-ink text-white rounded-2xl shadow-xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
                     {driveConnected ? (
                       <>
                         <div className="flex items-start gap-2 pb-2 border-b border-slate-700 mb-2">
@@ -484,22 +512,62 @@ const App: React.FC = () => {
                 <button
                   onClick={handleManualSave}
                   disabled={saveStatus === 'saving'}
-                  className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 uppercase tracking-widest transition-all"
+                  title={saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all disabled:opacity-60"
                 >
-                  {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
-                  {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                  {saveStatus === 'saving' ? <Loader2 className="w-4 h-4 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-4 h-4 text-brand-green" /> : <Save className="w-4 h-4" />}
                 </button>
-                <button
-                  onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
-                  className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg hover:bg-green-700 uppercase tracking-widest transition-all"
-                >
-                  <Download className="w-3 h-3" /> Reporte Excel
-                </button>
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setIsExportMenuOpen(o => !o)}
+                    title="Exportar"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all text-[9px] font-bold uppercase tracking-widest"
+                  >
+                    <FileOutput className="w-4 h-4" /> Exportar
+                  </button>
+                  {isExportMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-border rounded-xl shadow-sm z-50 p-1.5 animate-in fade-in zoom-in-95">
+                      <button
+                        onClick={() => { exportProjectToExcel(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-green"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Reporte Excel
+                      </button>
+                      <button
+                        onClick={() => { exportProjectToPDF(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-blue"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> APUs PDF
+                      </button>
+                      <button
+                        onClick={() => { exportBudgetToPDF(activeProject, chapters, apus); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-blue"
+                      >
+                        <Table className="w-3.5 h-3.5" /> Presupuesto PDF
+                      </button>
+                      <div className="h-px bg-border my-1.5" />
+                      <button
+                        disabled={!activeProject}
+                        onClick={() => { if (activeProject) handleShareProject(activeProject); setIsExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-muted-dark hover:bg-sidebar hover:text-brand-green disabled:opacity-40"
+                      >
+                        <Share2 className="w-3.5 h-3.5" /> Exportar proyecto (.json)
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <QuickCalculator />
+                <button
+                  onClick={() => setIsUserLibraryOpen(true)}
+                  title="Biblioteca del usuario"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => setIsHelpOpen(true)}
                   title="Manual de operación"
-                  className="p-2 rounded-xl text-slate-400 hover:text-[#004071] hover:bg-slate-100 transition-all"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
                 >
                   <HelpCircle className="w-4 h-4" />
                 </button>
@@ -520,7 +588,7 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="max-w-6xl mx-auto mb-6 flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-fit">
+                  <div className="max-w-6xl mx-auto mb-6 flex gap-2 bg-white p-1.5 rounded-2xl border border-border w-fit">
                     {([
                       { id: 'budget', label: 'Presupuesto', icon: <LayoutList className="w-3.5 h-3.5" /> },
                       { id: 'resources', label: 'Resumen de recursos', icon: <Layers className="w-3.5 h-3.5" /> },
@@ -529,7 +597,7 @@ const App: React.FC = () => {
                       <button
                         key={t.id}
                         onClick={() => setProjectView(t.id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${projectView === t.id ? 'bg-[#004071] text-white shadow' : 'text-slate-400 hover:text-[#004071] hover:bg-slate-50'}`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all ${projectView === t.id ? 'bg-brand-blue text-white' : 'text-muted hover:text-brand-blue hover:bg-sidebar'}`}
                       >
                         {t.icon} {t.label}
                       </button>
@@ -566,17 +634,41 @@ const App: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700">
+          <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700 relative">
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+              {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
+              <label
+                title="Importar proyecto (.json)"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer text-[9px] font-bold uppercase tracking-widest"
+              >
+                <FileInput className="w-4 h-4" /> Importar
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
+              <button
+                onClick={() => setIsUserLibraryOpen(true)}
+                title="Biblioteca del usuario"
+                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                title="Manual de operación"
+                className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+            </div>
             <div className="p-8 bg-white rounded-full shadow-inner">
-              <Database className="w-20 h-20 text-[#004071] opacity-10" />
+              <Database className="w-20 h-20 text-brand-blue opacity-10" />
             </div>
             <div className="text-center space-y-2">
-              <h1 className="text-4xl font-black text-[#004071] uppercase tracking-tighter">Hidrogestión APU ENGINE</h1>
-              <p className="text-slate-400 text-sm italic">Seleccione o cree un proyecto en la biblioteca lateral</p>
+              <h1 className="text-4xl font-bold text-brand-blue uppercase tracking-tighter">Hidrogestión APU ENGINE</h1>
+              <p className="text-muted text-sm italic">Seleccione o cree un proyecto en la biblioteca lateral</p>
             </div>
             <button
               onClick={() => setIsProjectModalOpen(true)}
-              className="bg-[#004071] text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-xl"
+              className="bg-brand-blue text-white px-10 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-sm"
             >
               Comenzar Nuevo Proyecto
             </button>
@@ -605,12 +697,13 @@ const App: React.FC = () => {
         />
       )}
 
-      {chapterModalProjectId && (
+      {chapterModalContext && (
         <ChapterModal
-          onClose={() => setChapterModalProjectId(null)}
+          isSubchapter={!!chapterModalContext.parentChapterId}
+          onClose={() => setChapterModalContext(null)}
           onSubmit={(name) => {
-            addChapter({ id: safeUUID(), projectId: activeProjectId!, code: '', name });
-            setChapterModalProjectId(null);
+            addChapter({ id: safeUUID(), projectId: chapterModalContext.projectId, code: '', name, parentChapterId: chapterModalContext.parentChapterId });
+            setChapterModalContext(null);
           }}
         />
       )}

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Project, Chapter, APU, HistoryItem, ProjectSheet } from '../types';
 import { normalizeApu } from '../lib/apuCalculations';
+import { getDescendantChapterIds } from '../lib/chapters';
 
 const LIB_KEY = 'apu_engine_library';
 const PROJECT_PREFIX = 'apu_engine_project_';
@@ -136,11 +137,13 @@ export const useAppStore = () => {
     const newMetadata: Project = { ...sourceProject, id: newId, name: `${sourceProject.name} (Copia)`, createdAt: timestamp, updatedAt: timestamp };
 
     const chapterIdMap = new Map<string, string>();
-    const duplicatedChapters = (sourceData.chapters || []).map((c: Chapter) => {
-      const newChapterId = crypto.randomUUID();
-      chapterIdMap.set(c.id, newChapterId);
-      return { ...c, id: newChapterId, projectId: newId };
-    });
+    (sourceData.chapters || []).forEach((c: Chapter) => chapterIdMap.set(c.id, crypto.randomUUID()));
+    const duplicatedChapters = (sourceData.chapters || []).map((c: Chapter) => ({
+      ...c,
+      id: chapterIdMap.get(c.id)!,
+      projectId: newId,
+      parentChapterId: c.parentChapterId ? (chapterIdMap.get(c.parentChapterId) || c.parentChapterId) : c.parentChapterId
+    }));
 
     const duplicatedApus = (sourceData.apus || []).map((a: APU) => ({
       ...a,
@@ -155,7 +158,13 @@ export const useAppStore = () => {
   }, [projects]);
 
   const addChapter = useCallback((chapter: Chapter) => {
-    setChapters(prev => [...prev, chapter]);
+    setChapters(prev => {
+      if (chapter.parentChapterId) {
+        const parent = prev.find(c => c.id === chapter.parentChapterId);
+        if (!parent || parent.parentChapterId) return prev; // el padre debe ser un capítulo raíz (un solo nivel)
+      }
+      return [...prev, chapter];
+    });
   }, []);
 
   const moveChapter = useCallback((chapterId: string, direction: 'up' | 'down') => {
@@ -166,7 +175,8 @@ export const useAppStore = () => {
       const findNextIdx = () => {
         let current = direction === 'up' ? idx - 1 : idx + 1;
         while (current >= 0 && current < newChapters.length) {
-          if (newChapters[current].projectId === prev[idx].projectId) return current;
+          if (newChapters[current].projectId === prev[idx].projectId &&
+              (newChapters[current].parentChapterId ?? null) === (prev[idx].parentChapterId ?? null)) return current;
           current += direction === 'up' ? -1 : 1;
         }
         return -1;
@@ -178,23 +188,38 @@ export const useAppStore = () => {
     });
   }, []);
 
+  /** Reordena un proyecto en la biblioteca, insertándolo antes de `beforeProjectId` (o al final si es null). */
+  const reorderProject = useCallback((projectId: string, beforeProjectId: string | null) => {
+    setProjects(prev => {
+      const project = prev.find(p => p.id === projectId);
+      if (!project || projectId === beforeProjectId) return prev;
+      const without = prev.filter(p => p.id !== projectId);
+      const insertIdx = beforeProjectId !== null ? without.findIndex(p => p.id === beforeProjectId) : -1;
+      const result = [...without];
+      result.splice(insertIdx !== -1 ? insertIdx : result.length, 0, project);
+      return result;
+    });
+  }, []);
+
   /** Reordena un capítulo dentro de su proyecto, insertándolo antes de `beforeChapterId` (o al final si es null). */
   const reorderChapter = useCallback((chapterId: string, beforeChapterId: string | null) => {
     setChapters(prev => {
       const chapter = prev.find(c => c.id === chapterId);
       if (!chapter || chapterId === beforeChapterId) return prev;
+      const sameGroup = (c: Chapter) =>
+        c.projectId === chapter.projectId && (c.parentChapterId ?? null) === (chapter.parentChapterId ?? null);
       const without = prev.filter(c => c.id !== chapterId);
       if (beforeChapterId !== null) {
+        const target = without.find(c => c.id === beforeChapterId);
+        if (!target || !sameGroup(target)) return prev; // no reparenting silencioso por drag-and-drop
         const insertIdx = without.findIndex(c => c.id === beforeChapterId);
-        if (insertIdx !== -1) {
-          const result = [...without];
-          result.splice(insertIdx, 0, chapter);
-          return result;
-        }
+        const result = [...without];
+        result.splice(insertIdx, 0, chapter);
+        return result;
       }
       let insertPos = without.length;
       for (let i = without.length - 1; i >= 0; i--) {
-        if (without[i].projectId === chapter.projectId) { insertPos = i + 1; break; }
+        if (sameGroup(without[i])) { insertPos = i + 1; break; }
       }
       const result = [...without];
       result.splice(insertPos, 0, chapter);
@@ -203,9 +228,10 @@ export const useAppStore = () => {
   }, []);
 
   const deleteChapter = useCallback((id: string) => {
-    setChapters(prev => prev.filter(c => c.id !== id));
-    setApus(prev => prev.filter(a => a.chapterId !== id));
-  }, []);
+    const idsToDelete = new Set(getDescendantChapterIds(chapters, id));
+    setChapters(prev => prev.filter(c => !idsToDelete.has(c.id)));
+    setApus(prev => prev.filter(a => !idsToDelete.has(a.chapterId)));
+  }, [chapters]);
 
   const addApu = useCallback((apu: APU) => {
     setApus(prev => [...prev, { ...apu, createdAt: Date.now() }]);
@@ -288,7 +314,7 @@ export const useAppStore = () => {
 
   return {
     sheet, setSheet,
-    projects, setProjects,
+    projects, setProjects, reorderProject,
     chapters, setChapters, addChapter, moveChapter, reorderChapter, deleteChapter,
     apus, setApus, addApu, updateApu, deleteApu, moveApu, moveApuToChapter,
     history, addHistoryItem,
