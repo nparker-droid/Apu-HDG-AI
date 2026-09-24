@@ -341,7 +341,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-[#F1F5F9] overflow-hidden">
+    <div className="flex h-screen bg-surface overflow-hidden">
       <Toaster position="top-right" richColors />
 
       <Sidebar
@@ -374,18 +374,18 @@ const App: React.FC = () => {
         onRenameChapter={(id, name) => setChapters(prev => prev.map(c => c.id === id ? { ...c, name } : c))}
       />
 
-      <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-slate-50">
+      <main className="flex-1 overflow-y-auto relative flex flex-col no-scrollbar bg-surface">
         {activeProject ? (
           <>
-            <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+            <header className="sticky top-0 z-40 bg-white border-b border-border px-8 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-6">
-                {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-[#004071] transition-colors"><Menu className="w-5 h-5" /></button>}
+                {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
                 <div className="min-w-0">
-                  <h2 className="text-lg font-black text-[#004071] uppercase max-w-2xl whitespace-normal break-words leading-tight">
+                  <h2 className="text-lg font-bold text-brand-blue uppercase max-w-2xl whitespace-normal break-words leading-tight">
                     {activeApu ? activeApu.name : projectView === 'resources' ? `RESUMEN DE RECURSOS: ${activeProject.name}` : projectView === 'sheet' ? `HOJA DE CÁLCULO: ${activeProject.name}` : `ESTRUCTURA GENERAL: ${activeProject.name}`}
                   </h2>
                   <div className="flex items-center gap-3">
-                    <p className="text-[9px] text-[#88C13E] font-black uppercase tracking-widest">{activeProject.name}</p>
+                    <p className="text-[9px] text-brand-green font-bold uppercase tracking-widest">{activeProject.name}</p>
                   </div>
                 </div>
               </div>
@@ -393,14 +393,14 @@ const App: React.FC = () => {
                 {storagePct >= 60 && (
                   <span
                     title={`Almacenamiento local usado: ${formatNumber(storageUsage / 1024 / 1024, 1, 1)} MB de ~5 MB. Respalde en Drive o exporte y elimine proyectos antiguos.`}
-                    className={`hidden md:flex items-center gap-1 text-[8px] font-black uppercase px-3 py-2 rounded-xl whitespace-nowrap ${storagePct >= 85 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}
+                    className={`hidden md:flex items-center gap-1 text-[8px] font-bold uppercase px-3 py-2 rounded-xl whitespace-nowrap ${storagePct >= 85 ? 'bg-status-red/10 text-status-red' : 'bg-status-amber/10 text-status-amber'}`}
                   >
                     <HardDrive className="w-3 h-3" /> {formatNumber(storagePct, 0, 0)}%
                   </span>
                 )}
                 {lastSaved && (
-                  <span className="hidden md:flex items-center gap-1 text-[8px] text-slate-500 font-black uppercase bg-slate-100 px-3 py-2 rounded-xl whitespace-nowrap">
-                    <Clock className="w-3 h-3 text-[#88C13E]" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
+                  <span className="hidden md:flex items-center gap-1 text-[8px] text-muted-dark font-bold uppercase bg-sidebar px-3 py-2 rounded-xl whitespace-nowrap">
+                    <Clock className="w-3 h-3 text-brand-green" /> {new Date(lastSaved).toLocaleTimeString('es-CL')}
                   </span>
                 )}
 
@@ -409,23 +409,23 @@ const App: React.FC = () => {
                   <button
                     onClick={driveConnected ? undefined : handleDriveConnect}
                     disabled={driveStatus === 'syncing'}
-                    className={`flex items-center gap-1.5 text-[8px] font-black px-3 py-2 rounded-xl uppercase tracking-widest transition-all disabled:opacity-60 select-none ${
+                    className={`flex items-center gap-1.5 text-[8px] font-bold px-3 py-2 rounded-xl uppercase tracking-widest transition-all disabled:opacity-60 select-none ${
                       driveConnected
-                        ? 'bg-blue-50 text-blue-600 cursor-default'
-                        : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 cursor-pointer'
+                        ? 'bg-brand-blue/10 text-brand-blue cursor-default'
+                        : 'bg-sidebar text-muted hover:bg-brand-blue/10 hover:text-brand-blue cursor-pointer'
                     }`}
                   >
                     {driveStatus === 'syncing'
                       ? <Loader2 className="w-3 h-3 animate-spin" />
                       : driveStatus === 'synced'
-                        ? <Check className="w-3 h-3 text-green-500" />
+                        ? <Check className="w-3 h-3 text-brand-green" />
                         : <CloudUpload className="w-3 h-3" />}
                     Drive
-                    {driveConnected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 ml-0.5" />}
+                    {driveConnected && <span className="w-1.5 h-1.5 rounded-full bg-brand-green ml-0.5" />}
                   </button>
 
                   {/* Hover card con acciones y ubicación */}
-                  <div className="absolute right-0 top-full mt-2 w-60 bg-slate-900 text-white rounded-2xl shadow-2xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
+                  <div className="absolute right-0 top-full mt-2 w-60 bg-ink text-white rounded-2xl shadow-xl p-3 z-50 invisible opacity-0 group-hover/drive:visible group-hover/drive:opacity-100 transition-all duration-150 pointer-events-none group-hover/drive:pointer-events-auto">
                     {driveConnected ? (
                       <>
                         <div className="flex items-start gap-2 pb-2 border-b border-slate-700 mb-2">
@@ -484,14 +484,14 @@ const App: React.FC = () => {
                 <button
                   onClick={handleManualSave}
                   disabled={saveStatus === 'saving'}
-                  className="flex items-center gap-2 text-[8px] font-black px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 uppercase tracking-widest transition-all"
+                  className="flex items-center gap-2 text-[8px] font-bold px-4 py-2 rounded-xl bg-sidebar text-muted-dark hover:bg-border uppercase tracking-widest transition-all"
                 >
-                  {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
+                  {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-3 h-3 text-brand-green" /> : <Save className="w-3 h-3" />}
                   {saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
                 </button>
                 <button
                   onClick={() => exportProjectToExcel(activeProject, chapters, apus)}
-                  className="flex items-center gap-2 text-[8px] font-black text-white bg-green-600 px-4 py-2 rounded-xl shadow-lg hover:bg-green-700 uppercase tracking-widest transition-all"
+                  className="flex items-center gap-2 text-[8px] font-bold text-white bg-brand-green px-4 py-2 rounded-xl hover:bg-brand-green-dark uppercase tracking-widest transition-all"
                 >
                   <Download className="w-3 h-3" /> Reporte Excel
                 </button>
@@ -499,7 +499,7 @@ const App: React.FC = () => {
                 <button
                   onClick={() => setIsHelpOpen(true)}
                   title="Manual de operación"
-                  className="p-2 rounded-xl text-slate-400 hover:text-[#004071] hover:bg-slate-100 transition-all"
+                  className="p-2 rounded-xl text-muted hover:text-brand-blue hover:bg-sidebar transition-all"
                 >
                   <HelpCircle className="w-4 h-4" />
                 </button>
@@ -520,7 +520,7 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="max-w-6xl mx-auto mb-6 flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-fit">
+                  <div className="max-w-6xl mx-auto mb-6 flex gap-2 bg-white p-1.5 rounded-2xl border border-border w-fit">
                     {([
                       { id: 'budget', label: 'Presupuesto', icon: <LayoutList className="w-3.5 h-3.5" /> },
                       { id: 'resources', label: 'Resumen de recursos', icon: <Layers className="w-3.5 h-3.5" /> },
@@ -529,7 +529,7 @@ const App: React.FC = () => {
                       <button
                         key={t.id}
                         onClick={() => setProjectView(t.id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${projectView === t.id ? 'bg-[#004071] text-white shadow' : 'text-slate-400 hover:text-[#004071] hover:bg-slate-50'}`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all ${projectView === t.id ? 'bg-brand-blue text-white' : 'text-muted hover:text-brand-blue hover:bg-sidebar'}`}
                       >
                         {t.icon} {t.label}
                       </button>
@@ -568,15 +568,15 @@ const App: React.FC = () => {
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700">
             <div className="p-8 bg-white rounded-full shadow-inner">
-              <Database className="w-20 h-20 text-[#004071] opacity-10" />
+              <Database className="w-20 h-20 text-brand-blue opacity-10" />
             </div>
             <div className="text-center space-y-2">
-              <h1 className="text-4xl font-black text-[#004071] uppercase tracking-tighter">Hidrogestión APU ENGINE</h1>
-              <p className="text-slate-400 text-sm italic">Seleccione o cree un proyecto en la biblioteca lateral</p>
+              <h1 className="text-4xl font-bold text-brand-blue uppercase tracking-tighter">Hidrogestión APU ENGINE</h1>
+              <p className="text-muted text-sm italic">Seleccione o cree un proyecto en la biblioteca lateral</p>
             </div>
             <button
               onClick={() => setIsProjectModalOpen(true)}
-              className="bg-[#004071] text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-xl"
+              className="bg-brand-blue text-white px-10 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-sm"
             >
               Comenzar Nuevo Proyecto
             </button>
