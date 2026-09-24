@@ -38,10 +38,26 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
   const [active, setActive] = useState<Pos>({ r: 0, c: 0 });
   const [anchor, setAnchor] = useState<Pos>({ r: 0, c: 0 });
   const [editing, setEditing] = useState<string | null>(null); // texto en edición (null = no edita)
+  const [editCell, setEditCell] = useState<Pos | null>(null); // celda cuyo contenido se está editando (fija durante el "linkeo" de celdas)
   const [dragging, setDragging] = useState(false);
   const undoStack = useRef<Record<string, string>[]>([]);
   const gridRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLInputElement>(null);
+  const formulaBarRef = useRef<HTMLInputElement>(null);
+  // Rastrean el input activo y la posición del cursor para insertar referencias donde corresponde.
+  const activeInputRef = useRef<'cell' | 'bar'>('cell');
+  const caretRef = useRef(0);
+  // Mientras se construye una fórmula, al hacer clic/arrastrar sobre otras celdas se
+  // inserta su referencia (o rango) en vez de navegar; este ref guarda el tramo de texto
+  // insertado para poder reemplazarlo mientras dura el arrastre (p.ej. A1 → A1:B5).
+  const pickRef = useRef<{ spanStart: number; spanEnd: number } | null>(null);
+  const isFormulaEdit = editing !== null && /^\s*=/.test(editing);
+  const currentInputEl = () => (activeInputRef.current === 'bar' ? formulaBarRef.current : editorRef.current);
+  const trackCaret = (which: 'cell' | 'bar') => (e: React.SyntheticEvent<HTMLInputElement>) => {
+    activeInputRef.current = which;
+    const el = e.target as HTMLInputElement;
+    caretRef.current = el.selectionStart ?? el.value.length;
+  };
 
   // ---------- Evaluación ----------
   const values = useMemo(() => {
@@ -97,8 +113,8 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
 
   const inSel = (r: number, c: number) => r >= selRange.r1 && r <= selRange.r2 && c >= selRange.c1 && c <= selRange.c2;
 
-  const move = (dr: number, dc: number, extend = false) => {
-    const next = { r: Math.max(0, Math.min(ROWS - 1, active.r + dr)), c: Math.max(0, Math.min(COLS - 1, active.c + dc)) };
+  const moveFrom = (pos: Pos, dr: number, dc: number, extend = false) => {
+    const next = { r: Math.max(0, Math.min(ROWS - 1, pos.r + dr)), c: Math.max(0, Math.min(COLS - 1, pos.c + dc)) };
     setActive(next);
     if (!extend) setAnchor(next);
     requestAnimationFrame(() => {
@@ -106,25 +122,55 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
       el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
   };
+  const move = (dr: number, dc: number, extend = false) => moveFrom(active, dr, dc, extend);
 
   const startEdit = (initial?: string) => {
+    if (editCell) return; // ya editando (p.ej. doble clic sobre la celda que se está "linkeando")
     const ref = makeRef(active.c, active.r);
+    setEditCell({ r: active.r, c: active.c });
     setEditing(initial !== undefined ? initial : (cells[ref] ?? ''));
     requestAnimationFrame(() => editorRef.current?.focus());
   };
 
   const finishingRef = useRef(false);
   const finishEdit = (save: boolean, dr = 0, dc = 0) => {
-    if (editing === null || finishingRef.current) return;
+    if (editing === null || !editCell || finishingRef.current) return;
     finishingRef.current = true;
     requestAnimationFrame(() => { finishingRef.current = false; });
+    const origin = editCell;
     if (save) {
-      const ref = makeRef(active.c, active.r);
+      const ref = makeRef(origin.c, origin.r);
       if ((cells[ref] ?? '') !== editing) commitCells({ [ref]: editing });
     }
     setEditing(null);
+    setEditCell(null);
+    pickRef.current = null;
     gridRef.current?.focus();
-    if (dr || dc) move(dr, dc);
+    if (dr || dc) moveFrom(origin, dr, dc);
+    else { setActive(origin); setAnchor(origin); }
+  };
+
+  /** Inserta (o, durante un arrastre, reemplaza) la referencia de celda/rango en la fórmula que se está escribiendo. */
+  const pickReference = (refText: string, isNewPick: boolean) => {
+    setEditing(prev => {
+      const text = prev ?? '';
+      if (isNewPick || !pickRef.current) {
+        const pos = Math.min(caretRef.current, text.length);
+        const before = text.slice(0, pos);
+        const after = text.slice(pos);
+        pickRef.current = { spanStart: before.length, spanEnd: before.length + refText.length };
+        return before + refText + after;
+      }
+      const { spanStart, spanEnd } = pickRef.current;
+      const next = text.slice(0, spanStart) + refText + text.slice(spanEnd);
+      pickRef.current = { spanStart, spanEnd: spanStart + refText.length };
+      return next;
+    });
+    requestAnimationFrame(() => {
+      const el = currentInputEl();
+      const p = pickRef.current?.spanEnd;
+      if (el && p !== undefined) { el.focus(); el.setSelectionRange(p, p); caretRef.current = p; }
+    });
   };
 
   // ---------- Portapapeles ----------
@@ -201,7 +247,11 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
       const w = Math.max(50, st.w + e.clientX - st.x);
       onChange({ ...sheet, colWidths: { ...colWidths, [st.c]: w } });
     };
-    const onUp = () => { resizeRef.current = null; setDragging(false); };
+    // Global (no solo dentro de la grilla): si se suelta el mouse fuera del área
+    // scrolleable mientras se arrastra un rango de referencia de fórmula, igual hay
+    // que limpiar el estado — si no, el siguiente mouseenter sobre una celda (sin
+    // botón presionado) seguiría insertando/reemplazando la referencia.
+    const onUp = () => { resizeRef.current = null; setDragging(false); pickRef.current = null; };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
@@ -237,7 +287,7 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
     } catch { /* cancelado */ }
   };
 
-  const activeRef = makeRef(active.c, active.r);
+  const activeRef = editCell ? makeRef(editCell.c, editCell.r) : makeRef(active.c, active.r);
   const activeDisplay = display(activeRef);
   const selSum = useMemo(() => {
     if (selRange.r1 === selRange.r2 && selRange.c1 === selRange.c2) return null;
@@ -254,9 +304,11 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
         <span className="font-mono text-[11px] font-black text-[#004071] bg-slate-100 rounded-lg px-3 py-2 w-16 text-center">{activeRef}</span>
         <span className="text-slate-300 font-black italic text-sm">fx</span>
         <input
+          ref={formulaBarRef}
           value={editing !== null ? editing : (cells[activeRef] ?? '')}
-          onFocus={() => { if (editing === null) setEditing(cells[activeRef] ?? ''); }}
-          onChange={e => setEditing(e.target.value)}
+          onFocus={e => { activeInputRef.current = 'bar'; if (editCell === null) { setEditCell({ r: active.r, c: active.c }); setEditing(cells[activeRef] ?? ''); } caretRef.current = e.target.selectionStart ?? e.target.value.length; }}
+          onChange={e => { setEditing(e.target.value); caretRef.current = e.target.selectionStart ?? e.target.value.length; }}
+          onSelect={trackCaret('bar')}
           onKeyDown={e => {
             if (e.key === 'Enter') { e.preventDefault(); finishEdit(true, 1, 0); }
             else if (e.key === 'Tab') { e.preventDefault(); finishEdit(true, 0, e.shiftKey ? -1 : 1); }
@@ -277,6 +329,8 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
           <div className="absolute right-0 top-6 z-50 hidden group-hover:block w-80 bg-[#004071] text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl">
             <p className="font-black uppercase tracking-widest mb-1">Uso rápido</p>
             <p>• Escriba directamente sobre la celda; Enter/Tab para confirmar, Esc para cancelar.</p>
+            <p>• Doble clic (o F2) sobre una celda con contenido para editarla sin borrarla.</p>
+            <p>• Al escribir una fórmula ("="), haga clic en otra celda para insertar su referencia, o arrástrelo para insertar un rango (A1:B5), sin escribirlo a mano.</p>
             <p>• Copie/pegue tablas desde Excel (Ctrl+C / Ctrl+V). Suprimir borra la selección.</p>
             <p>• Fórmulas con "=": + - * / ^ %, SUMA, PROMEDIO, MIN, MAX, REDONDEAR, RAIZ, SI, CONTAR.</p>
             <p>• Separador de argumentos ";". Decimal con "," o "." ("1.500" se lee como mil quinientos).</p>
@@ -292,7 +346,6 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
         onCopy={e => onCopy(e)}
         onCut={e => onCopy(e, true)}
         onPaste={onPaste}
-        onMouseUp={() => setDragging(false)}
         className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto outline-none max-h-[calc(100vh-260px)] ${dragging ? 'select-none' : ''}`}
       >
         <table className="border-collapse text-[11px] select-none" style={{ tableLayout: 'fixed', width: 44 + Array.from({ length: COLS }, (_, c) => colWidths[c] || DEFAULT_W).reduce((a, b) => a + b, 0) }}>
@@ -321,29 +374,51 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
                 {Array.from({ length: COLS }, (_, c) => {
                   const ref = makeRef(c, r);
                   const isActive = active.r === r && active.c === c;
+                  const isEditingHere = editCell !== null && editCell.r === r && editCell.c === c;
                   const d = display(ref);
                   return (
                     <td
                       key={c}
                       data-cell={ref}
                       onMouseDown={e => {
-                        if (editing !== null) finishEdit(true);
+                        if (editCell) {
+                          if (isFormulaEdit) {
+                            // Construyendo una fórmula: clic = insertar referencia, no navegar/confirmar.
+                            e.preventDefault();
+                            pickReference(ref, true);
+                            setAnchor({ r, c });
+                            setActive({ r, c });
+                            setDragging(true);
+                            return;
+                          }
+                          finishEdit(true);
+                        }
                         const pos = { r, c };
                         setActive(pos);
                         if (!e.shiftKey) setAnchor(pos);
                         setDragging(true);
                         gridRef.current?.focus();
                       }}
-                      onMouseEnter={() => { if (dragging && !resizeRef.current) setActive({ r, c }); }}
+                      onMouseEnter={() => {
+                        if (dragging && pickRef.current && editCell && isFormulaEdit) {
+                          const refText = (anchor.r === r && anchor.c === c) ? ref : `${makeRef(anchor.c, anchor.r)}:${ref}`;
+                          pickReference(refText, false);
+                          setActive({ r, c });
+                          return;
+                        }
+                        if (dragging && !resizeRef.current && !pickRef.current) setActive({ r, c });
+                      }}
                       onDoubleClick={() => startEdit()}
-                      className={`border border-slate-100 px-1.5 overflow-hidden whitespace-nowrap text-ellipsis relative ${inSel(r, c) && !isActive ? 'bg-[#004071]/5' : ''} ${isActive ? 'outline outline-2 outline-[#004071] -outline-offset-1 z-[5]' : ''} ${d.num ? 'text-right font-mono text-slate-700' : 'text-left text-slate-700'} ${d.err ? 'text-red-500 font-bold' : ''} ${(cells[ref] || '').startsWith('=') && !d.err ? 'text-[#004071]' : ''}`}
+                      className={`border border-slate-100 px-1.5 overflow-hidden whitespace-nowrap text-ellipsis relative ${inSel(r, c) && !isActive ? 'bg-[#004071]/5' : ''} ${isEditingHere ? 'outline outline-2 outline-[#88C13E] -outline-offset-1 z-[6]' : isActive ? 'outline outline-2 outline-[#004071] -outline-offset-1 z-[5]' : ''} ${d.num ? 'text-right font-mono text-slate-700' : 'text-left text-slate-700'} ${d.err ? 'text-red-500 font-bold' : ''} ${(cells[ref] || '').startsWith('=') && !d.err ? 'text-[#004071]' : ''}`}
                     >
-                      {isActive && editing !== null ? (
+                      {isEditingHere && editing !== null ? (
                         <input
                           ref={editorRef}
                           autoFocus
                           value={editing}
-                          onChange={e => setEditing(e.target.value)}
+                          onChange={e => { setEditing(e.target.value); caretRef.current = e.target.selectionStart ?? e.target.value.length; }}
+                          onSelect={trackCaret('cell')}
+                          onFocus={() => { activeInputRef.current = 'cell'; }}
                           onKeyDown={e => {
                             if (e.key === 'Enter') { e.preventDefault(); finishEdit(true, e.shiftKey ? -1 : 1, 0); }
                             else if (e.key === 'Tab') { e.preventDefault(); finishEdit(true, 0, e.shiftKey ? -1 : 1); }

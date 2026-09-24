@@ -15,10 +15,14 @@ interface NumberInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEleme
  * muestra formato oficial (1.234,56) al perder el foco.
  */
 const NumberInput: React.FC<NumberInputProps> = ({
-  value, onValueChange, mode = 'decimal', minDecimals = 0, maxDecimals = 3, onFocus, onBlur, ...rest
+  value, onValueChange, mode = 'decimal', minDecimals = 0, maxDecimals = 3, onFocus, onBlur, onMouseDown, ...rest
 }) => {
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? formatNumber(Number(value) || 0, minDecimals, maxDecimals);
+  // Distingue foco por clic (deja el cursor donde se hizo clic, para editar en el lugar)
+  // de foco por teclado/Tab (selecciona todo, para sobrescribir rápido) — evita que un
+  // clic en el campo borre la cifra existente en cuanto se escribe el siguiente carácter.
+  const clickedRef = React.useRef(false);
 
   return (
     <input
@@ -26,10 +30,12 @@ const NumberInput: React.FC<NumberInputProps> = ({
       inputMode="decimal"
       {...rest}
       value={display}
+      onMouseDown={e => { clickedRef.current = true; onMouseDown?.(e); }}
       onFocus={e => {
         const n = Number(value) || 0;
         setDraft(n === 0 ? '' : String(Math.round(n * 1e6) / 1e6).replace('.', ','));
-        requestAnimationFrame(() => e.target.select());
+        if (!clickedRef.current) requestAnimationFrame(() => e.target.select());
+        clickedRef.current = false;
         onFocus?.(e);
       }}
       onChange={e => {
