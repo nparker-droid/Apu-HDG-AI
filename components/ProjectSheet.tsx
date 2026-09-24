@@ -250,9 +250,9 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
 
   return (
     <div className="max-w-full space-y-3 animate-in fade-in duration-500 pb-10">
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex flex-wrap items-center gap-3">
-        <span className="font-mono text-[11px] font-black text-[#004071] bg-slate-100 rounded-lg px-3 py-2 w-16 text-center">{activeRef}</span>
-        <span className="text-slate-300 font-black italic text-sm">fx</span>
+      <div className="bg-white rounded-2xl border border-border shadow-sm p-3 flex flex-wrap items-center gap-3">
+        <span className="font-mono text-[11px] font-bold text-brand-blue bg-sidebar rounded-lg px-3 py-2 w-16 text-center">{activeRef}</span>
+        <span className="text-muted-light font-bold italic text-sm">fx</span>
         <input
           value={editing !== null ? editing : (cells[activeRef] ?? '')}
           onFocus={() => { if (editing === null) setEditing(cells[activeRef] ?? ''); }}
@@ -264,17 +264,17 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
           }}
           onBlur={() => finishEdit(true)}
           placeholder="Valor o fórmula (=A1*B1, =SUMA(A1:A10), =REDONDEAR(A1/3;2))"
-          className="flex-1 min-w-[16rem] bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 outline-none focus:border-[#004071]"
+          className="flex-1 min-w-[16rem] bg-sidebar border border-border rounded-lg px-3 py-2 font-mono text-xs text-ink outline-none focus:border-brand-blue"
         />
-        <button onClick={undo} title="Deshacer (Ctrl+Z)" className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[#004071]"><Undo2 className="w-4 h-4" /></button>
-        <button onClick={exportXlsx} title="Exportar a Excel" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-green-700"><FileSpreadsheet className="w-3.5 h-3.5" /> Excel</button>
+        <button onClick={undo} title="Deshacer (Ctrl+Z)" className="p-2 rounded-lg text-muted hover:bg-sidebar hover:text-brand-blue"><Undo2 className="w-4 h-4" /></button>
+        <button onClick={exportXlsx} title="Exportar a Excel" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-green text-white text-[9px] font-bold uppercase tracking-widest hover:bg-brand-green-dark"><FileSpreadsheet className="w-3.5 h-3.5" /> Excel</button>
         <button
           onClick={() => { if (Object.keys(cells).length && window.confirm('¿Borrar todo el contenido de la hoja de cálculo?')) commitCells(Object.fromEntries(Object.keys(cells).map(k => [k, '']))); }}
-          title="Limpiar hoja" className="p-2 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500"
+          title="Limpiar hoja" className="p-2 rounded-lg text-muted-light hover:bg-status-red/10 hover:text-status-red"
         ><Trash2 className="w-4 h-4" /></button>
         <div className="relative group">
-          <Info className="w-4 h-4 text-slate-300 cursor-help" />
-          <div className="absolute right-0 top-6 z-50 hidden group-hover:block w-80 bg-[#004071] text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl">
+          <Info className="w-4 h-4 text-muted-light cursor-help" />
+          <div className="absolute right-0 top-6 z-50 hidden group-hover:block w-80 bg-brand-blue text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-sm">
             <p className="font-black uppercase tracking-widest mb-1">Uso rápido</p>
             <p>• Escriba directamente sobre la celda; Enter/Tab para confirmar, Esc para cancelar.</p>
             <p>• Copie/pegue tablas desde Excel (Ctrl+C / Ctrl+V). Suprimir borra la selección.</p>
@@ -293,7 +293,7 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
         onCut={e => onCopy(e, true)}
         onPaste={onPaste}
         onMouseUp={() => setDragging(false)}
-        className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto outline-none max-h-[calc(100vh-260px)] ${dragging ? 'select-none' : ''}`}
+        className={`bg-white rounded-2xl border border-border shadow-sm overflow-auto outline-none max-h-[calc(100vh-260px)] ${dragging ? 'select-none' : ''}`}
       >
         <table className="border-collapse text-[11px] select-none" style={{ tableLayout: 'fixed', width: 44 + Array.from({ length: COLS }, (_, c) => colWidths[c] || DEFAULT_W).reduce((a, b) => a + b, 0) }}>
           <colgroup>
@@ -302,13 +302,13 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky top-0 left-0 z-30 bg-slate-100 border border-slate-200" />
+              <th className="sticky top-0 left-0 z-30 bg-sidebar border border-border" />
               {Array.from({ length: COLS }, (_, c) => (
-                <th key={c} className={`sticky top-0 z-20 border border-slate-200 font-black text-[10px] relative ${c >= selRange.c1 && c <= selRange.c2 ? 'bg-[#004071]/10 text-[#004071]' : 'bg-slate-100 text-slate-500'}`} style={{ height: ROW_H }}>
+                <th key={c} className={`sticky top-0 z-20 border border-border font-bold text-[10px] relative ${c >= selRange.c1 && c <= selRange.c2 ? 'bg-brand-blue/10 text-brand-blue' : 'bg-sidebar text-muted-dark'}`} style={{ height: ROW_H }}>
                   {indexToCol(c)}
                   <span
                     onMouseDown={e => { e.preventDefault(); e.stopPropagation(); resizeRef.current = { c, x: e.clientX, w: colWidths[c] || DEFAULT_W }; setDragging(true); }}
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[#88C13E]"
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-brand-green"
                   />
                 </th>
               ))}
@@ -317,7 +317,7 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
           <tbody>
             {Array.from({ length: ROWS }, (_, r) => (
               <tr key={r} style={{ height: ROW_H }}>
-                <td className={`sticky left-0 z-10 border border-slate-200 text-center font-black text-[10px] ${r >= selRange.r1 && r <= selRange.r2 ? 'bg-[#004071]/10 text-[#004071]' : 'bg-slate-100 text-slate-400'}`}>{r + 1}</td>
+                <td className={`sticky left-0 z-10 border border-border text-center font-bold text-[10px] ${r >= selRange.r1 && r <= selRange.r2 ? 'bg-brand-blue/10 text-brand-blue' : 'bg-sidebar text-muted'}`}>{r + 1}</td>
                 {Array.from({ length: COLS }, (_, c) => {
                   const ref = makeRef(c, r);
                   const isActive = active.r === r && active.c === c;
@@ -336,7 +336,7 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
                       }}
                       onMouseEnter={() => { if (dragging && !resizeRef.current) setActive({ r, c }); }}
                       onDoubleClick={() => startEdit()}
-                      className={`border border-slate-100 px-1.5 overflow-hidden whitespace-nowrap text-ellipsis relative ${inSel(r, c) && !isActive ? 'bg-[#004071]/5' : ''} ${isActive ? 'outline outline-2 outline-[#004071] -outline-offset-1 z-[5]' : ''} ${d.num ? 'text-right font-mono text-slate-700' : 'text-left text-slate-700'} ${d.err ? 'text-red-500 font-bold' : ''} ${(cells[ref] || '').startsWith('=') && !d.err ? 'text-[#004071]' : ''}`}
+                      className={`border border-border px-1.5 overflow-hidden whitespace-nowrap text-ellipsis relative ${inSel(r, c) && !isActive ? 'bg-brand-blue/5' : ''} ${isActive ? 'outline outline-2 outline-brand-blue -outline-offset-1 z-[5]' : ''} ${d.num ? 'text-right font-mono text-ink' : 'text-left text-ink'} ${d.err ? 'text-status-red font-bold' : ''} ${(cells[ref] || '').startsWith('=') && !d.err ? 'text-brand-blue' : ''}`}
                     >
                       {isActive && editing !== null ? (
                         <input
@@ -361,11 +361,11 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
           </tbody>
         </table>
       </div>
-      <div className="flex justify-end gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 min-h-[1rem]">
+      <div className="flex justify-end gap-4 text-[10px] font-bold text-muted uppercase tracking-widest px-2 min-h-[1rem]">
         {selSum && (<>
           <span>Recuento: {selSum.count}</span>
           <span>Promedio: {formatNumber(selSum.avg, 0, 4)}</span>
-          <span className="text-[#004071]">Suma: {formatNumber(selSum.sum, 0, 4)}</span>
+          <span className="text-brand-blue">Suma: {formatNumber(selSum.sum, 0, 4)}</span>
         </>)}
         {!selSum && activeDisplay.text && <span>{activeRef}: {activeDisplay.text}</span>}
       </div>
