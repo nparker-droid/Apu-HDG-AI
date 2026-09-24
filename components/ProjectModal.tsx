@@ -87,6 +87,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
               <input type="text" value={formData.version} onChange={e => setFormData({...formData, version: e.target.value})} className={`w-1/3 px-4 py-3 rounded-xl text-sm text-ink outline-none transition-colors ${emptyFieldClass(!formData.version)}`} placeholder="Ej: REV A" />
                   <select value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})} className="w-2/3 px-4 py-3 bg-sidebar border border-transparent rounded-xl text-sm text-ink outline-none transition-colors">
                     <option>Estudio de Perfil</option>
+                    <option>Anteproyecto</option>
+                    <option>Ingeniería de Detalle</option>
                     <option>Licitación</option>
                     <option>Construcción</option>
                     <option>As-Built</option>

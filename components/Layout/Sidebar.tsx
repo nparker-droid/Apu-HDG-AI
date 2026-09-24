@@ -361,7 +361,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     {project.date && <span className="text-[7px] font-semibold opacity-50">{formatMonthYear(project.date)}</span>}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1 opacity-0 group-hover/project:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 transition-opacity shrink-0">
                                 <button onClick={(e) => { e.stopPropagation(); onEditProject(project); }} title="Renombrar/Editar" className="p-1 hover:text-brand-green"><Edit3 className="w-3 h-3" /></button>
                                 <button onClick={(e) => { e.stopPropagation(); onDuplicateProject(project.id); }} title="Duplicar" className="p-1 hover:text-brand-green"><Copy className="w-3 h-3" /></button>
                                 <button
@@ -374,7 +374,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 >
                                     <Trash2 className="w-3 h-3" />
                                 </button>
-                                {!term && <GripVertical className="w-3 h-3 opacity-40" title="Arrastrar para reordenar" />}
+                                {!term && <GripVertical className="w-2.5 h-2.5 opacity-25 ml-1.5" title="Arrastrar para reordenar" />}
                             </div>
                         </div>
 

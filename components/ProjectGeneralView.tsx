@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FileText, TrendingUp, DollarSign, PieChart, ChevronUp, ChevronDown } from 'lucide-react';
+import { FileText, ChevronUp, ChevronDown } from 'lucide-react';
 import { Project, Chapter, APU } from '../types';
 import { exportBudgetToPDF } from '../services/exportService';
 import { calculateApuTotals, getZeroCostInfo } from '../lib/apuCalculations';
@@ -63,7 +63,7 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   const zeroCount = projectApus.filter(a => getZeroCostInfo(a, project).isZero).length;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
         <div className="p-8 border-b border-border bg-sidebar/50 flex justify-between items-center">
           <div>
@@ -180,29 +180,20 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
-          <div className="flex items-center gap-3 mb-2 text-muted">
-            <DollarSign className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Total Neto</span>
+      <div className="sticky bottom-0 z-10 pt-3 pb-4 bg-white/95 backdrop-blur-sm border-t border-border shadow-[0_-6px_16px_rgba(0,0,0,0.06)]">
+        <div className="max-w-xs ml-auto space-y-1">
+          <div className="flex items-center justify-between gap-6 text-xs">
+            <span className="text-muted font-semibold uppercase tracking-wide">Total Neto</span>
+            <span className="font-bold text-ink font-mono">{formatCLP(budgetData.totalNetoProyecto)}</span>
           </div>
-          <p className="text-3xl font-bold text-brand-blue">{formatCLP(budgetData.totalNetoProyecto)}</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
-          <div className="flex items-center gap-3 mb-2 text-muted">
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">IVA (19%)</span>
+          <div className="flex items-center justify-between gap-6 text-xs">
+            <span className="text-muted font-semibold uppercase tracking-wide">IVA (19%)</span>
+            <span className="font-bold text-muted-dark font-mono">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</span>
           </div>
-          <p className="text-3xl font-bold text-muted-dark">{formatCLP(budgetData.totalNetoProyecto * 0.19)}</p>
-        </div>
-
-        <div className="bg-brand-green p-6 rounded-2xl shadow-sm text-white">
-          <div className="flex items-center gap-3 mb-2 opacity-80">
-            <PieChart className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Total Bruto</span>
+          <div className="flex items-center justify-between gap-6 bg-brand-green text-white px-4 py-2 rounded-xl mt-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">Total Bruto</span>
+            <span className="text-base font-bold font-mono">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</span>
           </div>
-          <p className="text-3xl font-bold">{formatCLP(budgetData.totalNetoProyecto * 1.19)}</p>
         </div>
       </div>
     </div>
