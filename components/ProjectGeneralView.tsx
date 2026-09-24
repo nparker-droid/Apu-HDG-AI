@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
-import { FileText, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { Project, Chapter, APU } from '../types';
-import { exportBudgetToPDF } from '../services/exportService';
 import { calculateApuTotals, getZeroCostInfo } from '../lib/apuCalculations';
 import { formatNumber } from '../lib/number';
 import { getRootChapters, getSubchapters } from '../lib/chapters';
@@ -65,17 +64,12 @@ const ProjectGeneralView: React.FC<ProjectGeneralViewProps> = ({ project, chapte
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
-        <div className="p-8 border-b border-border bg-sidebar/50 flex justify-between items-center">
-          <div>
-            <h3 className="text-sm font-bold text-brand-blue uppercase tracking-tighter">Estructura de Costos del Proyecto</h3>
-            <div className="flex items-center gap-4 mt-1 text-[9px] font-bold text-muted uppercase tracking-widest">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-status-amber" /> Marcadas: {flaggedCount}</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-status-red" /> Con costos en $0: {zeroCount}</span>
-            </div>
+        <div className="p-8 border-b border-border bg-sidebar/50">
+          <h3 className="text-sm font-bold text-brand-blue uppercase tracking-tighter">Estructura de Costos del Proyecto</h3>
+          <div className="flex items-center gap-4 mt-1 text-[9px] font-bold text-muted uppercase tracking-widest">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-status-amber" /> Marcadas: {flaggedCount}</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-status-red" /> Con costos en $0: {zeroCount}</span>
           </div>
-          <button onClick={() => exportBudgetToPDF(project, chapters, apus)} className="flex items-center gap-2 bg-brand-blue text-white px-4 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest hover:bg-brand-blue-dark transition-all">
-            <FileText className="w-4 h-4" /> Exportar PDF
-          </button>
         </div>
 
         <div className="overflow-x-auto">

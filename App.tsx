@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Upload, Share2, FileText, Table } from 'lucide-react';
+import { Menu, Save, Loader2, Download, Plus, Check, Clock, Database, CloudUpload, CloudDownload, CloudOff, FolderOpen, RefreshCw, LogOut, HelpCircle, LayoutList, Layers, Table2, HardDrive, BookOpen, Share2, FileText, Table, FileInput, FileOutput } from 'lucide-react';
 import { useAppStore, STORAGE_ERROR_EVENT, getStorageUsage, STORAGE_QUOTA_BYTES } from './store/useAppStore';
 import ResourceSummary from './components/ResourceSummary';
 import ProjectSheet from './components/ProjectSheet';
@@ -426,9 +426,9 @@ const App: React.FC = () => {
 
                 <label
                   title="Importar proyecto (.json)"
-                  className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer text-[9px] font-bold uppercase tracking-widest"
                 >
-                  <Upload className="w-4 h-4" />
+                  <FileInput className="w-4 h-4" /> Importar
                   <input type="file" accept=".json" onChange={handleImport} className="hidden" />
                 </label>
 
@@ -521,9 +521,9 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setIsExportMenuOpen(o => !o)}
                     title="Exportar"
-                    className="p-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-green hover:bg-brand-green-dark transition-all text-[9px] font-bold uppercase tracking-widest"
                   >
-                    <Download className="w-4 h-4" />
+                    <FileOutput className="w-4 h-4" /> Exportar
                   </button>
                   {isExportMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-border rounded-xl shadow-sm z-50 p-1.5 animate-in fade-in zoom-in-95">
@@ -639,9 +639,9 @@ const App: React.FC = () => {
               {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-sidebar rounded-lg text-brand-blue transition-colors"><Menu className="w-5 h-5" /></button>}
               <label
                 title="Importar proyecto (.json)"
-                className="p-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white bg-brand-blue hover:bg-brand-blue-dark transition-all cursor-pointer text-[9px] font-bold uppercase tracking-widest"
               >
-                <Upload className="w-4 h-4" />
+                <FileInput className="w-4 h-4" /> Importar
                 <input type="file" accept=".json" onChange={handleImport} className="hidden" />
               </label>
               <button
