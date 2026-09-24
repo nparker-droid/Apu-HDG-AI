@@ -121,7 +121,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div
                     draggable
                     onDragStart={(e) => { setDraggedChapterId(chapter.id); e.dataTransfer.effectAllowed = 'move'; }}
-                    onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); }}
+                    onDragEnd={() => { setDraggedChapterId(null); setDragOverChapterId(null); setDragOver(null); }}
                     onDragOver={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         if (draggedApuId) { setDragOver({ chapterId: chapter.id, apuId: null }); return; }
@@ -236,33 +236,34 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {extraContent}
                 <div
                     className="space-y-0.5"
-                    onDragOver={(e) => { e.preventDefault(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
-                    onDrop={(e) => { e.preventDefault(); if (draggedApuId) { moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); } }}
+                    onDragOver={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); setDragOver({ chapterId: chapter.id, apuId: null }); }}
+                    onDrop={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); moveApuToChapter(draggedApuId, chapter.id, null); setDraggedApuId(null); setDragOver(null); }}
                 >
                     {collapsedChapters[chapter.id] && chapterApus.length > 0 && (
                         <div className="px-2 py-1.5 text-[8px] font-semibold text-muted-light italic">
                             {chapterApus.length} partida(s) — contraído
                         </div>
                     )}
-                    {draggedApuId && !collapsedChapters[chapter.id] && chapterApus.length === 0 && (
+                    {/* Siempre presente (no solo durante el arrastre): insertar nodos en dragstart desplaza la fila arrastrada y Chrome cancela el arrastre */}
+                    {!term && !collapsedChapters[chapter.id] && chapterApus.length === 0 && !extraContent && (
                         <div className={cn(
-                            "px-2 py-2.5 rounded-xl border border-dashed text-center text-[8px] font-semibold uppercase tracking-widest transition-colors",
-                            dragOver?.chapterId === chapter.id ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-border text-muted-light'
+                            "px-2 py-2 rounded-xl border border-dashed text-center text-[8px] font-semibold uppercase tracking-widest transition-colors",
+                            draggedApuId && dragOver?.chapterId === chapter.id ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-border text-muted-light'
                         )}>
-                            Soltar partida aquí
+                            Sin partidas — arrastra aquí
                         </div>
                     )}
                     {!collapsedChapters[chapter.id] && chapterApus.map(apu => (
                         <div key={apu.id}>
-                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId !== apu.id && (
+                            {dragOver?.chapterId === chapter.id && dragOver?.apuId === apu.id && draggedApuId && draggedApuId !== apu.id && (
                                 <div className="h-0.5 bg-brand-blue rounded-full mx-1 my-0.5" />
                             )}
                             <div
                                 draggable
                                 onDragStart={(e) => { e.stopPropagation(); setDraggedApuId(apu.id); e.dataTransfer.effectAllowed = 'move'; }}
                                 onDragEnd={() => { setDraggedApuId(null); setDragOver(null); }}
-                                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
-                                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (draggedApuId && draggedApuId !== apu.id) { moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); } }}
+                                onDragOver={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) setDragOver({ chapterId: chapter.id, apuId: apu.id }); }}
+                                onDrop={(e) => { if (!draggedApuId) return; e.preventDefault(); e.stopPropagation(); if (draggedApuId !== apu.id) moveApuToChapter(draggedApuId, chapter.id, apu.id); setDraggedApuId(null); setDragOver(null); }}
                                 onClick={() => setCurrentApuId(apu.id)}
                                 className={cn(
                                     "group/apu relative p-3 rounded-xl text-[9px] flex justify-between items-center transition-all select-none",
