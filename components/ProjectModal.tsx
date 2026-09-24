@@ -17,6 +17,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
     code: initialData?.code || '',
     name: initialData?.name || '',
     description: initialData?.description || '',
+    mandante: initialData?.mandante || '',
     location: initialData?.location || '',
     commune: initialData?.commune || '',
     region: initialData?.region || '',
@@ -58,6 +59,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ onClose, onSubmit, initialD
              <div className="md:col-span-1">
                 <label className="block text-[9px] font-semibold text-muted uppercase mb-1">Fecha Emisión</label>
                 <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className={`w-full px-4 py-3 rounded-xl text-sm text-ink outline-none focus:ring-2 focus:ring-brand-blue transition-colors ${emptyFieldClass(!formData.date)}`} />
+             </div>
+             <div className="md:col-span-4">
+                <label className="block text-[9px] font-semibold text-muted uppercase mb-1">Mandante / Entidad Licitante</label>
+                <input type="text" value={formData.mandante} onChange={e => setFormData({...formData, mandante: e.target.value})} className="w-full px-4 py-3 bg-sidebar border border-transparent rounded-xl text-sm text-ink outline-none focus:ring-2 focus:ring-brand-blue transition-colors" placeholder="Ej: Dirección de Obras Hidráulicas (MOP)" />
              </div>
           </div>
         </div>

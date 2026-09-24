@@ -53,6 +53,7 @@ export interface Project {
   code: string;
   name: string;
   description: string;
+  mandante: string;
   location: string;
   commune: string;
   region: string;
