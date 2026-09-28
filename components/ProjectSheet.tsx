@@ -5,6 +5,7 @@ import { ProjectSheet as SheetData, Project } from '../types';
 import { evaluate, CellValue, indexToCol, makeRef } from '../lib/formula';
 import { formatNumber, parseNumber } from '../lib/number';
 import { saveBlobWithPicker } from '../services/fileSaveService';
+import { buildDocFileName } from '../lib/fileNames';
 
 const COLS = 26;
 const ROWS = 200;
@@ -283,7 +284,7 @@ const ProjectSheet: React.FC<Props> = ({ project, sheet, onChange }) => {
     XLSX.utils.book_append_sheet(wb, ws, 'Cálculos');
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     try {
-      await saveBlobWithPicker(new Blob([buf]), `HDG_CALCULOS_${project.code}.xlsx`, 'Excel', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
+      await saveBlobWithPicker(new Blob([buf]), buildDocFileName(project, 'CALCULOS', 'xlsx'), 'Excel', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
     } catch { /* cancelado */ }
   };
 

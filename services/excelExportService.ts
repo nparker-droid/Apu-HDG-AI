@@ -2,6 +2,7 @@ import { Project, Chapter, APU, ItemCategory } from '../types';
 import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES, itemAmount } from '../lib/apuCalculations';
 import { buildChapterOutline } from '../lib/chapters';
+import { buildDocFileName } from '../lib/fileNames';
 
 // Exportación Excel con FÓRMULAS (trazable): cada total de línea, subtotal, CD, GG, Utilidad y P.U.
 // se calcula en la planilla; el presupuesto referencia el P.U. de cada hoja APU.
@@ -188,7 +189,7 @@ export const exportProjectToExcel = async (project: Project, chapters: Chapter[]
 
   XLSX().utils.book_append_sheet(wb, buildSheet(rows, [10, 55, 10, 12, 18, 18]), 'Presupuesto');
   apuSheets.forEach(s => XLSX().utils.book_append_sheet(wb, s.ws, s.name));
-  await saveWorkbook(wb, `HDG_REPORTE_${project.code}.xlsx`);
+  await saveWorkbook(wb, buildDocFileName(project, 'REPORTE', 'xlsx'));
 };
 
 export const exportSingleApuToExcel = async (project: Project, apu: APU) => {
@@ -196,5 +197,5 @@ export const exportSingleApuToExcel = async (project: Project, apu: APU) => {
   const wb = XLSX().utils.book_new();
   const { ws } = createApuWorksheet(apu, project, apu.code);
   XLSX().utils.book_append_sheet(wb, ws, safeSheetName(`APU ${apu.code}`, new Set()));
-  await saveWorkbook(wb, `HDG_APU_${apu.code}_${(apu.name || '').substring(0, 20)}.xlsx`);
+  await saveWorkbook(wb, buildDocFileName(project, `APU-${apu.code || 'PARTIDA'}`, 'xlsx'));
 };
