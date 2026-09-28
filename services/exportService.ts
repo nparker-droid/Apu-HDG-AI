@@ -122,8 +122,9 @@ const drawFooter = (doc: any, page: number, pageCount: number) => {
   doc.line(x0, y, x1, y);
 
   try {
-    const logoW = 44;
-    doc.addImage(LOGO_COLOR_BASE64, 'PNG', x0, y + 3, logoW, logoW / LOGO_COLOR_RATIO);
+    // Centrado verticalmente respecto del bloque de contacto (4 líneas)
+    const logoW = 48, logoH = logoW / LOGO_COLOR_RATIO;
+    doc.addImage(LOGO_COLOR_BASE64, 'PNG', x0, y + 9 - logoH / 2, logoW, logoH);
   } catch (e) {
     console.error("Error cargando logo:", e);
   }
