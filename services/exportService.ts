@@ -309,7 +309,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
       }
       if (entry.apus.length === 0) return;
       const subNumber = entry.number;
-      rows.push([{ content: `${subNumber} ${entry.chapter.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [248, 250, 253], textColor: COLOR_HDG_BLUE, fontStyle: 'bold' } }]);
+      rows.push([{ content: `${subNumber} ${entry.chapter.name.toUpperCase()}`, colSpan: 6, styles: { fillColor: [248, 250, 253], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', halign: 'left' } }]);
       let subTotal = 0;
       entry.apus.forEach(({ apu, number: apuNumber }) => {
         const stats = calculateTotals(apu, project);
