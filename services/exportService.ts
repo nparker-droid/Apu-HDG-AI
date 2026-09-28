@@ -4,6 +4,7 @@ import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES } from '../lib/apuCalculations';
 import { formatCLP as fmtCLP, formatNumber } from '../lib/number';
 import { buildChapterOutline } from '../lib/chapters';
+import { buildDocFileName } from '../lib/fileNames';
 
 const getJsPDF = () => {
   const g = window as any;
@@ -271,7 +272,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
   drawPageFrames(doc, project, 'Análisis de Precios Unitarios');
   await saveBlobWithPicker(
     doc.output('blob'),
-    `HDG_APU_PROYECTO_${project.code}.pdf`,
+    buildDocFileName(project, 'APU', 'pdf'),
     'PDF',
     { 'application/pdf': ['.pdf'] }
   );
@@ -412,7 +413,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   drawPageFrames(doc, project, 'Presupuesto de Obras');
   await saveBlobWithPicker(
     doc.output('blob'),
-    `HDG_PRESUPUESTO_${project.code}.pdf`,
+    buildDocFileName(project, 'PRESUPUESTO', 'pdf'),
     'PDF',
     { 'application/pdf': ['.pdf'] }
   );
