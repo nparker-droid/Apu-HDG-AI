@@ -3,8 +3,8 @@ import { Plus, Trash2, Sparkles, Loader2, ClipboardPaste, X, Check, Copy, HelpCi
 import NumberInput from './ui/NumberInput';
 import { parseNumber, formatNumber } from '../lib/number';
 import { computeItemTotal } from '../lib/apuCalculations';
-import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
-import { getDeviationReasoning, getFieldSuggestion, getResourcePriceFromWeb } from '../services/geminiService';
+import { APUItem, ItemCategory, HistoryItem } from '../types';
+import { getDeviationReasoning, getResourcePriceFromWeb } from '../services/geminiService';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { formatUnit } from '../services/exportService';
 import { formatCLP } from '../lib/number';
@@ -175,18 +175,27 @@ const SectionTable: React.FC<SectionTableProps> = ({
       toast.dismiss(loadingToastId);
       if (result && result.price > 0) {
         updateItem(index, 'unitPrice', result.price);
-        toast.success(`Precio sugerido: ${formatCLP(result.price)}`, {
-          description: `${result.reasoning}${result.sources?.length ? '\n' + formatPriceSources(result.sources) : ''}`,
-          duration: 12000,
-          closeButton: true,
-        });
+        if (result.source === 'web') {
+          toast.success(`Precio sugerido: ${formatCLP(result.price)}`, {
+            description: `${result.reasoning}${result.sources?.length ? '\n' + formatPriceSources(result.sources) : ''}`,
+            duration: 12000,
+            closeButton: true,
+          });
+        } else {
+          // Sin búsqueda web disponible (nivel gratuito): valor estimado por el modelo, sin fuentes
+          toast.warning(`Estimación IA sin fuente web: ${formatCLP(result.price)}`, {
+            description: `${result.reasoning}\nNo se pudo consultar precios en la web. Verifica este valor con cotizaciones antes de usarlo.`,
+            duration: 15000,
+            closeButton: true,
+          });
+        }
       } else {
         toast.warning('La IA no pudo encontrar un precio preciso. Por favor ingresa el precio manualmente.');
       }
-    } catch (error) {
+    } catch (error: any) {
       toast.dismiss(loadingToastId);
       console.error(error);
-      toast.error('Error al consultar el precio con IA.');
+      toast.error(`Error al consultar el precio con IA: ${error?.message || 'sin conexión'}`);
     } finally {
       setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: false }));
     }

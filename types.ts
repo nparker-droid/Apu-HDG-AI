@@ -83,11 +83,6 @@ export interface HistoryItem {
   chapterName?: string;
 }
 
-export interface SingleFieldSuggestion {
-  value: number;
-  reasoning: string;
-}
-
 /** Hoja de cálculo libre por proyecto. Claves de celda estilo "A1". */
 export interface ProjectSheet {
   cells: Record<string, string>;
