@@ -55,19 +55,40 @@ const isModelUnavailable = (e: any) => {
 
 const QUOTA_MESSAGE = 'Se agotó la cuota gratuita diaria de Gemini. Se renueva cada día (medianoche, hora del Pacífico).';
 
-/** Ejecuta la llamada con el primer modelo disponible y con cuota */
+const OVERLOAD_MESSAGE = 'Gemini está con alta demanda en este momento (saturación temporal de Google). Intenta nuevamente en unos minutos.';
+
+/** Saturación o falla transitoria del servicio de Google (500, 503, 504) */
+const isOverloaded = (e: any) => [500, 503, 504].includes(errorStatus(e));
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Ejecuta la llamada con el primer modelo disponible y con cuota.
+ * Ante saturación temporal pasa al siguiente modelo; si todos están saturados,
+ * reintenta una vez la lista completa tras una pausa breve.
+ */
 const withModels = async <T>(call: (model: string) => Promise<T>): Promise<T> => {
   let quotaExhausted = false;
+  let overloaded = false;
   let lastError: any;
-  for (const model of MODELS) {
-    try {
-      return await call(model);
-    } catch (e: any) {
-      if (errorStatus(e) === 429) { quotaExhausted = true; continue; }
-      if (!isModelUnavailable(e)) throw e;
-      lastError = e;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) {
+      if (!overloaded) break;
+      await wait(1500);
+    }
+    overloaded = false;
+    for (const model of MODELS) {
+      try {
+        return await call(model);
+      } catch (e: any) {
+        if (errorStatus(e) === 429) { quotaExhausted = true; continue; }
+        if (isOverloaded(e)) { overloaded = true; continue; }
+        if (!isModelUnavailable(e)) throw e;
+        lastError = e;
+      }
     }
   }
+  if (overloaded) throw new HttpError(503, OVERLOAD_MESSAGE);
   if (quotaExhausted) throw new HttpError(429, QUOTA_MESSAGE);
   throw new HttpError(503, `Ningún modelo de Gemini disponible (${MODELS.join(', ')}). Revisa GEMINI_MODELS. Detalle: ${lastError?.message || ''}`);
 };
