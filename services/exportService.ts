@@ -1,5 +1,5 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
-import { LOGO_COLOR_BASE64, LOGO_COLOR_RATIO } from './logoData';
+import { LOGO_BASE64, LOGO_COLOR_BASE64, LOGO_COLOR_RATIO } from './logoData';
 import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES } from '../lib/apuCalculations';
 import { formatCLP as fmtCLP, formatNumber } from '../lib/number';
@@ -43,12 +43,14 @@ const COMPANY_CONTACT = [
   'Santiago – Chile'
 ];
 
-// Layout A4 (mm): el contenido va entre el cajetín y el pie en todas las páginas
+// Layout A4 (mm): la página 1 lleva banda azul; las siguientes, encabezado solo de texto
 const PAGE_WIDTH = 210;
 const MARGIN_X = 14;
-const CONTENT_TOP = 32;
+const FIRST_PAGE_TOP = 42;
+const CONTENT_TOP = 26;
 const FOOTER_TOP = 275;
 const CONTENT_BOTTOM = FOOTER_TOP - 3;
+// margin.top rige para las páginas que agrega autoTable (2 en adelante)
 const TABLE_MARGIN = { top: CONTENT_TOP, bottom: 297 - CONTENT_BOTTOM, left: MARGIN_X, right: MARGIN_X };
 
 // Recorta el texto con "…" para que quepa en maxWidth con la fuente activa
@@ -59,53 +61,61 @@ const fitText = (doc: any, text: string, maxWidth: number) => {
   return `${t.trimEnd()}…`;
 };
 
-// Encabezado tipo cajetín: título y proyecto | Proyecto, Mandante, Versión/Fecha
-const drawHeader = (doc: any, project: Project, title: string) => {
-  const x0 = MARGIN_X, x1 = PAGE_WIDTH - MARGIN_X, xMeta = 128, y = 8, h = 17;
-  doc.setDrawColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
-  doc.setLineWidth(0.35);
-  doc.rect(x0, y, x1 - x0, h);
-  doc.line(xMeta, y, xMeta, y + h);
+const projectMeta = (project: Project) =>
+  `PROYECTO: ${project.code || '—'}  |  VERSIÓN: ${project.version || '—'}  |  FECHA: ${formatDate(project.date)}`;
 
-  doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+// Página 1: banda azul corporativa con logo, título y datos del proyecto
+const drawFirstPageHeader = (doc: any, project: Project, title: string) => {
+  const x1 = PAGE_WIDTH - MARGIN_X;
+  doc.setFillColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.rect(0, 0, PAGE_WIDTH, 35, 'F');
+  doc.setFillColor(COLOR_HDG_LIME[0], COLOR_HDG_LIME[1], COLOR_HDG_LIME[2]);
+  doc.rect(0, 35, PAGE_WIDTH, 1.2, 'F');
+
+  try {
+    doc.addImage(LOGO_BASE64, 'PNG', MARGIN_X, 5, 46, 20);
+  } catch (e) {
+    console.error("Error cargando logo:", e);
+  }
+
+  const textWidth = x1 - 70;
+  doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(title.toUpperCase(), x0 + 4, y + 7);
+  doc.setFontSize(14);
+  doc.text(title.toUpperCase(), x1, 12, { align: 'right' });
 
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const nameLines = doc.splitTextToSize((project.name || '').toUpperCase(), textWidth).slice(0, 2);
+  doc.text(nameLines, x1, 18, { align: 'right' });
+
   doc.setFontSize(7.5);
-  doc.setTextColor(60, 60, 60);
-  const nameLines = doc.splitTextToSize((project.name || '').toUpperCase(), xMeta - x0 - 8).slice(0, 2);
-  doc.text(nameLines, x0 + 4, y + 11.5);
-
-  const meta: [string, string][] = [
-    ['PROYECTO', project.code],
-    ['MANDANTE', project.mandante],
-    ['VERSIÓN / FECHA', `${project.version || '—'} · ${formatDate(project.date)}`]
-  ];
-  const rowH = h / meta.length;
-  meta.forEach(([label, value], j) => {
-    const yy = y + j * rowH;
-    if (j) doc.line(xMeta, yy, x1, yy);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.6);
-    doc.setTextColor(COLOR_GREY[0], COLOR_GREY[1], COLOR_GREY[2]);
-    doc.text(label, xMeta + 2, yy + 3.6);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.8);
-    doc.setTextColor(30, 30, 30);
-    doc.text(fitText(doc, value, 42), x1 - 2, yy + 3.8, { align: 'right' });
-  });
-
-  doc.setFillColor(COLOR_HDG_LIME[0], COLOR_HDG_LIME[1], COLOR_HDG_LIME[2]);
-  doc.rect(x0, y + h + 0.8, x1 - x0, 0.7, 'F');
+  doc.text(fitText(doc, `MANDANTE: ${project.mandante || '—'}`, textWidth), x1, 27, { align: 'right' });
+  doc.text(projectMeta(project), x1, 31, { align: 'right' });
 };
 
-// Pie: barra azul, logo a color a la izquierda, datos de contacto a la derecha, paginación al centro
+// Páginas 2+: encabezado discreto, solo texto
+const drawPageHeader = (doc: any, project: Project, title: string) => {
+  const x0 = MARGIN_X, x1 = PAGE_WIDTH - MARGIN_X;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.text(title.toUpperCase(), x0, 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(COLOR_GREY[0], COLOR_GREY[1], COLOR_GREY[2]);
+  doc.text(fitText(doc, (project.name || '').toUpperCase(), 100), x0, 17.5);
+  doc.text(projectMeta(project), x1, 13, { align: 'right' });
+  doc.text(fitText(doc, `MANDANTE: ${project.mandante || '—'}`, 80), x1, 17.5, { align: 'right' });
+};
+
+// Pie (formato informes): línea gris, logo a color a la izquierda; contacto y paginación a la derecha
 const drawFooter = (doc: any, page: number, pageCount: number) => {
   const x0 = MARGIN_X, x1 = PAGE_WIDTH - MARGIN_X, y = FOOTER_TOP;
-  doc.setFillColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
-  doc.rect(x0, y, x1 - x0, 0.7, 'F');
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(x0, y, x1, y);
 
   try {
     const logoW = 44;
@@ -117,11 +127,8 @@ const drawFooter = (doc: any, page: number, pageCount: number) => {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(COLOR_GREY[0], COLOR_GREY[1], COLOR_GREY[2]);
-  COMPANY_CONTACT.forEach((line, i) => doc.text(line, x1, y + 5 + i * 3.3, { align: 'right' }));
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
-  doc.text(`Pág. ${page} / ${pageCount}`, PAGE_WIDTH / 2, 292, { align: 'center' });
+  [...COMPANY_CONTACT, `Página ${page} de ${pageCount}`]
+    .forEach((line, i) => doc.text(line, x1, y + 4.5 + i * 3.3, { align: 'right' }));
 };
 
 // Se dibuja al final sobre todas las páginas, incluidas las que crea autoTable al cortar tablas
@@ -129,7 +136,8 @@ const drawPageFrames = (doc: any, project: Project, title: string) => {
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    drawHeader(doc, project, title);
+    if (i === 1) drawFirstPageHeader(doc, project, title);
+    else drawPageHeader(doc, project, title);
     drawFooter(doc, i, pageCount);
   }
 };
@@ -142,7 +150,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
   if (!jsPDF) return;
 
   const doc = new jsPDF();
-  let currentY = CONTENT_TOP;
+  let currentY = FIRST_PAGE_TOP;
 
   buildChapterOutline(chapters, apus, project.id).forEach(({ chapter, number: chapterNumber, entries: outlineEntries }) => {
     // Partidas en el orden mezclado del capítulo (propias y de subcapítulos intercaladas)
@@ -269,7 +277,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   if (!jsPDF) return;
 
   const doc = new jsPDF();
-  let currentY = CONTENT_TOP + 3;
+  let currentY = FIRST_PAGE_TOP + 3;
   let totalNetoProyecto = 0;
   const chapterSummary: { n: number; name: string; total: number }[] = [];
 
