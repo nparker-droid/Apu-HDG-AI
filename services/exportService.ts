@@ -1,5 +1,5 @@
 import { Project, Chapter, APU, ItemCategory } from '../types';
-import { LOGO_BASE64 } from './logoData';
+import { LOGO_COLOR_BASE64, LOGO_COLOR_RATIO } from './logoData';
 import { saveBlobWithPicker } from './fileSaveService';
 import { calculateApuTotals, CATEGORIES } from '../lib/apuCalculations';
 import { formatCLP as fmtCLP, formatNumber } from '../lib/number';
@@ -35,38 +35,102 @@ const formatDate = (dateStr: string) => {
 
 const COLOR_HDG_BLUE = [0, 64, 113];
 const COLOR_HDG_LIME = [136, 193, 62];
+const COLOR_GREY = [110, 110, 110];
 
-const drawCorporateHeader = (doc: any, project: Project, title: string) => {
-  const pageWidth = 210;
-  doc.setFillColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
-  doc.rect(0, 0, pageWidth, 35, 'F');
+const COMPANY_CONTACT = [
+  'Av. Providencia 2330 Of. 63 – Providencia · +562 2333 7038',
+  'mail@hidrogestion.cl',
+  'Santiago – Chile'
+];
+
+// Layout A4 (mm): el contenido va entre el cajetín y el pie en todas las páginas
+const PAGE_WIDTH = 210;
+const MARGIN_X = 14;
+const CONTENT_TOP = 32;
+const FOOTER_TOP = 275;
+const CONTENT_BOTTOM = FOOTER_TOP - 3;
+const TABLE_MARGIN = { top: CONTENT_TOP, bottom: 297 - CONTENT_BOTTOM, left: MARGIN_X, right: MARGIN_X };
+
+// Recorta el texto con "…" para que quepa en maxWidth con la fuente activa
+const fitText = (doc: any, text: string, maxWidth: number) => {
+  let t = text || '—';
+  if (doc.getTextWidth(t) <= maxWidth) return t;
+  while (t.length > 1 && doc.getTextWidth(`${t}…`) > maxWidth) t = t.slice(0, -1);
+  return `${t.trimEnd()}…`;
+};
+
+// Encabezado tipo cajetín: título y proyecto | Proyecto, Mandante, Versión/Fecha
+const drawHeader = (doc: any, project: Project, title: string) => {
+  const x0 = MARGIN_X, x1 = PAGE_WIDTH - MARGIN_X, xMeta = 128, y = 8, h = 17;
+  doc.setDrawColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.setLineWidth(0.35);
+  doc.rect(x0, y, x1 - x0, h);
+  doc.line(xMeta, y, xMeta, y + h);
+
+  doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(title.toUpperCase(), x0 + 4, y + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  const nameLines = doc.splitTextToSize((project.name || '').toUpperCase(), xMeta - x0 - 8).slice(0, 2);
+  doc.text(nameLines, x0 + 4, y + 11.5);
+
+  const meta: [string, string][] = [
+    ['PROYECTO', project.code],
+    ['MANDANTE', project.mandante],
+    ['VERSIÓN / FECHA', `${project.version || '—'} · ${formatDate(project.date)}`]
+  ];
+  const rowH = h / meta.length;
+  meta.forEach(([label, value], j) => {
+    const yy = y + j * rowH;
+    if (j) doc.line(xMeta, yy, x1, yy);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.6);
+    doc.setTextColor(COLOR_GREY[0], COLOR_GREY[1], COLOR_GREY[2]);
+    doc.text(label, xMeta + 2, yy + 3.6);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(30, 30, 30);
+    doc.text(fitText(doc, value, 42), x1 - 2, yy + 3.8, { align: 'right' });
+  });
+
   doc.setFillColor(COLOR_HDG_LIME[0], COLOR_HDG_LIME[1], COLOR_HDG_LIME[2]);
-  doc.rect(0, 35, pageWidth, 1.2, 'F');
+  doc.rect(x0, y + h + 0.8, x1 - x0, 0.7, 'F');
+};
+
+// Pie: barra azul, logo a color a la izquierda, datos de contacto a la derecha, paginación al centro
+const drawFooter = (doc: any, page: number, pageCount: number) => {
+  const x0 = MARGIN_X, x1 = PAGE_WIDTH - MARGIN_X, y = FOOTER_TOP;
+  doc.setFillColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.rect(x0, y, x1 - x0, 0.7, 'F');
 
   try {
-    doc.addImage(LOGO_BASE64, 'PNG', 14, 5, 46, 20);
+    const logoW = 44;
+    doc.addImage(LOGO_COLOR_BASE64, 'PNG', x0, y + 3, logoW, logoW / LOGO_COLOR_RATIO);
   } catch (e) {
     console.error("Error cargando logo:", e);
   }
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text(title.toUpperCase(), 196, 15, { align: 'right' });
-
-  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`PROYECTO: ${project.name.toUpperCase()}`, 196, 25, { align: 'right' });
-  doc.text(`VERSIÓN: ${project.version} | FECHA: ${formatDate(project.date)}`, 196, 30, { align: 'right' });
+  doc.setFontSize(7);
+  doc.setTextColor(COLOR_GREY[0], COLOR_GREY[1], COLOR_GREY[2]);
+  COMPANY_CONTACT.forEach((line, i) => doc.text(line, x1, y + 5 + i * 3.3, { align: 'right' }));
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(COLOR_HDG_BLUE[0], COLOR_HDG_BLUE[1], COLOR_HDG_BLUE[2]);
+  doc.text(`Pág. ${page} / ${pageCount}`, PAGE_WIDTH / 2, 292, { align: 'center' });
 };
 
-const addPageNumbers = (doc: any) => {
+// Se dibuja al final sobre todas las páginas, incluidas las que crea autoTable al cortar tablas
+const drawPageFrames = (doc: any, project: Project, title: string) => {
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`Página ${i} de ${pageCount}`, 196, 288, { align: 'right' });
+    drawHeader(doc, project, title);
+    drawFooter(doc, i, pageCount);
   }
 };
 
@@ -78,9 +142,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
   if (!jsPDF) return;
 
   const doc = new jsPDF();
-  let currentY = 42;
-
-  drawCorporateHeader(doc, project, 'Análisis de Precios Unitarios');
+  let currentY = CONTENT_TOP;
 
   buildChapterOutline(chapters, apus, project.id).forEach(({ chapter, number: chapterNumber, entries: outlineEntries }) => {
     // Partidas en el orden mezclado del capítulo (propias y de subcapítulos intercaladas)
@@ -102,10 +164,9 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
       const totalRows = CATEGORIES.reduce((n, c) => n + (apu.items?.[c]?.length ?? 0) + 1, 0);
       const estimatedHeight = 50 + (totalRows * 7) + 25;
 
-      if (currentY + estimatedHeight > 275) {
+      if (currentY + estimatedHeight > CONTENT_BOTTOM) {
         doc.addPage();
-        drawCorporateHeader(doc, project, 'Análisis de Precios Unitarios');
-        currentY = 42;
+        currentY = CONTENT_TOP;
       }
 
       const startY = currentY;
@@ -156,7 +217,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
             3: { cellWidth: 30, halign: 'right' },
             4: { cellWidth: 30, halign: 'right' }
           },
-          margin: { left: 14, right: 14 }
+          margin: TABLE_MARGIN
         });
         currentY = (doc as any).lastAutoTable.finalY + 2;
       });
@@ -194,7 +255,7 @@ export const exportProjectToPDF = async (project: Project, chapters: Chapter[], 
     });
   });
 
-  addPageNumbers(doc);
+  drawPageFrames(doc, project, 'Análisis de Precios Unitarios');
   await saveBlobWithPicker(
     doc.output('blob'),
     `HDG_APU_PROYECTO_${project.code}.pdf`,
@@ -208,9 +269,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   if (!jsPDF) return;
 
   const doc = new jsPDF();
-  drawCorporateHeader(doc, project, 'Presupuesto de Obras');
-
-  let currentY = 45;
+  let currentY = CONTENT_TOP + 3;
   let totalNetoProyecto = 0;
   const chapterSummary: { n: number; name: string; total: number }[] = [];
 
@@ -264,6 +323,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
       showFoot: 'lastPage',
       footStyles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', fontSize: 7.5 },
       theme: 'grid',
+      margin: TABLE_MARGIN,
       styles: { fontSize: 7.5, font: 'helvetica' },
       headStyles: { fillColor: COLOR_HDG_BLUE, halign: 'center' },
       columnStyles: {
@@ -283,8 +343,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   if (chapterSummary.length > 0) {
     if (currentY > 230) {
       doc.addPage();
-      drawCorporateHeader(doc, project, 'Presupuesto de Obras');
-      currentY = 45;
+      currentY = CONTENT_TOP + 3;
     }
     (doc as any).autoTable({
       startY: currentY + 5,
@@ -292,6 +351,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
       body: chapterSummary.map(r => [String(r.n), r.name, formatCLP(r.total), totalNetoProyecto > 0 ? `${formatNumber(r.total / totalNetoProyecto * 100, 1, 1)}%` : '—']),
       foot: [[{ content: 'TOTAL NETO', colSpan: 2, styles: { halign: 'right' } }, formatCLP(totalNetoProyecto), '100,0%']],
       theme: 'grid',
+      margin: TABLE_MARGIN,
       styles: { fontSize: 7.5, font: 'helvetica' },
       headStyles: { fillColor: COLOR_HDG_BLUE, halign: 'center' },
       footStyles: { fillColor: [240, 244, 250], textColor: COLOR_HDG_BLUE, fontStyle: 'bold', halign: 'right' },
@@ -306,10 +366,9 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   }
 
   let finalY = currentY + 10;
-  if (finalY > 250) {
+  if (finalY + 28 > CONTENT_BOTTOM) {
     doc.addPage();
-    drawCorporateHeader(doc, project, 'Presupuesto de Obras');
-    finalY = 45;
+    finalY = CONTENT_TOP + 3;
   }
 
   const boxWidth = 85;
@@ -337,7 +396,7 @@ export const exportBudgetToPDF = async (project: Project, chapters: Chapter[], a
   doc.setFont('helvetica', 'bold');
   doc.text(formatCLP(totalNetoProyecto * 1.19), 194, finalY + 22, { align: 'right' });
 
-  addPageNumbers(doc);
+  drawPageFrames(doc, project, 'Presupuesto de Obras');
   await saveBlobWithPicker(
     doc.output('blob'),
     `HDG_PRESUPUESTO_${project.code}.pdf`,
