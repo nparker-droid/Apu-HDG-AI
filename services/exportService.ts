@@ -108,6 +108,10 @@ const drawPageHeader = (doc: any, project: Project, title: string) => {
   doc.text(fitText(doc, (project.name || '').toUpperCase(), 100), x0, 17.5);
   doc.text(projectMeta(project), x1, 13, { align: 'right' });
   doc.text(fitText(doc, `MANDANTE: ${project.mandante || '—'}`, 80), x1, 17.5, { align: 'right' });
+
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(x0, 21, x1, 21);
 };
 
 // Pie (formato informes): línea gris, logo a color a la izquierda; contacto y paginación a la derecha
