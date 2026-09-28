@@ -25,15 +25,15 @@ El costo cero depende de **la key**, no del código: debe pertenecer a un proyec
 
 Sin facturación, al agotar la cuota diaria Google responde con error 429 y no cobra. La app muestra "Se agotó la cuota gratuita de Gemini".
 
+La IA se usa solo para **estructurar partidas**: a partir del título y la unidad propone materiales, mano de obra (HH por unidad) y equipos (HM por unidad), sin precios. Los precios se completan desde el historial del usuario o el catálogo estándar cuando la descripción coincide.
+
 Consideraciones del nivel gratuito:
 - Google puede usar el contenido enviado para mejorar sus productos (con revisión humana). No ingresar información confidencial.
-- Las cuotas son dinámicas; las vigentes para la key se ven en AI Studio → *Rate limits*.
-- La búsqueda web (Google Search) no está disponible en nivel gratuito para Gemini 3.x. La app intenta usarla con la familia 2.5 Flash y, si no está disponible, entrega una **estimación IA sin fuente web**, marcada como tal.
+- Las cuotas son dinámicas; las vigentes para la key se ven en AI Studio → *Rate limits*. La app usa primero un modelo Flash (mejor calidad, cuota diaria baja) y, al agotarse, pasa a Flash-Lite.
 
 Variables opcionales del servidor:
 
 | Variable | Valor por defecto | Uso |
 |---|---|---|
-| `GEMINI_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Modelos de texto en orden de preferencia (si uno no está disponible se usa el siguiente) |
-| `GEMINI_SEARCH_MODELS` | `gemini-2.5-flash,gemini-2.5-flash-lite` | Modelos para búsqueda de precios en la web |
+| `GEMINI_MODELS` | `gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Modelos en orden de preferencia; si uno no existe o agotó su cuota se usa el siguiente |
 | `ALLOWED_ORIGINS` | — | Orígenes adicionales autorizados a usar `/api/gemini` (el dominio propio siempre lo está) |

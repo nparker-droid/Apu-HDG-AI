@@ -1,16 +1,28 @@
 import React, { useState } from 'react';
 import { Sparkles, Users, Box, HardHat, Globe, Hash, Settings2, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { APU, Project, Chapter, ItemCategory, APUItem, HistoryItem } from '../types';
-import { getApuSuggestions } from '../services/geminiService';
+import { structureApu, StructuredResource } from '../services/geminiService';
 import SectionTable from './SectionTable';
 import { exportSingleApuToExcel } from '../services/excelExportService';
-import { calculateApuTotals } from '../lib/apuCalculations';
+import { calculateApuTotals, computeItemTotal } from '../lib/apuCalculations';
+import { STANDARD_LIBRARY } from '../data/standardLibrary';
+import ConfirmationModal from './ui/ConfirmationModal';
 import { toast } from 'sonner';
 import NumberInput from './ui/NumberInput';
 import { formatCLP as fmtCLP } from '../lib/number';
 
 const formatCLP = fmtCLP;
 const emptyFieldClass = (isEmpty: boolean) => isEmpty ? 'border border-status-amber/40 bg-status-amber/5' : '';
+
+const normalizeKey = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+
+// Correspondencia entre categorías de la app y las listas que devuelve la IA
+const AI_CATEGORIES: [ItemCategory, 'materials' | 'labor' | 'equipment' | 'others'][] = [
+  [ItemCategory.MATERIAL, 'materials'],
+  [ItemCategory.MANO_DE_OBRA, 'labor'],
+  [ItemCategory.EQUIPO, 'equipment'],
+  [ItemCategory.OTROS, 'others']
+];
 
 interface APUEditorProps {
   apu: APU;
@@ -43,19 +55,88 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
 
   const calculateSubtotal = (category: ItemCategory) => (apu.items[category] ?? []).reduce((sum, item) => sum + (item.total || 0), 0);
 
-  const handleAiSuggest = async () => {
-    if (!apu.name) { toast.error('Ingresa el nombre de la partida primero.'); return; }
+  const [confirmAiReplace, setConfirmAiReplace] = useState(false);
+
+  /** Precios conocidos por categoría: historial del usuario (más reciente primero) y catálogo estándar */
+  const buildPriceLookup = () => {
+    const lookup = new Map<string, number>();
+    const add = (category: ItemCategory, description: string | undefined, price: number | undefined) => {
+      const key = `${category}|${normalizeKey(description || '')}`;
+      if (description && Number(price) > 0 && !lookup.has(key)) lookup.set(key, Number(price));
+    };
+    history.forEach(h => add(h.category, h.description, h.unitPrice));
+    STANDARD_LIBRARY.forEach(lib => AI_CATEGORIES.forEach(([cat]) => lib.items?.[cat]?.forEach(i => add(cat, i.description, i.unitPrice))));
+    return lookup;
+  };
+
+  const knownDescriptions = () => {
+    const known: Record<string, string[]> = { materials: [], labor: [], equipment: [], others: [] };
+    AI_CATEGORIES.forEach(([cat, key]) => {
+      const seen = new Set<string>();
+      for (const h of history) {
+        if (h.category !== cat || !h.description) continue;
+        const k = normalizeKey(h.description);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        known[key].push(h.description);
+        if (known[key].length >= 40) break;
+      }
+    });
+    return known;
+  };
+
+  const hasItems = AI_CATEGORIES.some(([cat]) => (apu.items[cat] ?? []).length > 0);
+
+  const handleAiStructure = () => {
+    if (!apu.name?.trim()) { toast.error('Ingresa el nombre de la partida primero.'); return; }
+    if (hasItems) { setConfirmAiReplace(true); return; }
+    runAiStructure();
+  };
+
+  const runAiStructure = async () => {
+    setConfirmAiReplace(false);
     setIsAiLoading(true);
     try {
-      const s = await getApuSuggestions(apu.name);
-      const map = (items: any[], usePerformance = false) => items.map(i => {
-        const quantity = usePerformance ? 1 : (Number(i.quantity) || 1);
-        const performance = usePerformance ? (Number(i.performance) || 1) : 1;
-        const unitPrice = Number(i.unitPrice) || 0;
-        return { id: crypto.randomUUID(), description: i.description, unit: i.unit, quantity, performance, unitPrice, total: unitPrice * (usePerformance ? performance : quantity) };
+      const s = await structureApu({
+        name: apu.name.trim(),
+        unit: apu.unit?.trim() || '',
+        chapter: chapter?.name || '',
+        project: [project.name, project.description].filter(Boolean).join(' – ').slice(0, 300),
+        location: [project.location, project.commune, project.region].filter(Boolean).join(', ').slice(0, 300),
+        known: knownDescriptions()
       });
-      onUpdate({ ...apu, items: { [ItemCategory.MATERIAL]: map(s.materials || []), [ItemCategory.MANO_DE_OBRA]: map(s.labor || [], true), [ItemCategory.EQUIPO]: map((s.equipment || []).map((i: any) => ({ ...i, quantity: Number(i.performance) || Number(i.quantity) || 1 }))), [ItemCategory.OTROS]: [] } });
-      toast.success('APU generado por IA correctamente');
+
+      const prices = buildPriceLookup();
+      let priced = 0;
+      let total = 0;
+      const toItems = (category: ItemCategory, list: StructuredResource[]): APUItem[] => list.map(r => {
+        const unitPrice = prices.get(`${category}|${normalizeKey(r.description)}`) || 0;
+        if (unitPrice > 0) priced++;
+        total++;
+        const isLabor = category === ItemCategory.MANO_DE_OBRA;
+        const item: APUItem = {
+          id: crypto.randomUUID(),
+          description: r.description,
+          unit: r.unit,
+          quantity: isLabor ? 1 : r.quantity,
+          performance: isLabor ? r.quantity : 1,
+          unitPrice,
+          total: 0,
+          note: `IA: ${r.note || 'sin observaciones'}${unitPrice > 0 ? ' · Precio tomado del historial' : ' · Precio pendiente'}`
+        };
+        item.total = computeItemTotal(category, item);
+        return item;
+      });
+
+      const items = Object.fromEntries(AI_CATEGORIES.map(([cat, key]) => [cat, toItems(cat, s[key] || [])])) as APU['items'];
+      if (total === 0) { toast.warning('La IA no devolvió recursos para esta partida. Reformula el título con más detalle.'); return; }
+
+      onUpdate({ ...apu, unit: apu.unit?.trim() ? apu.unit : (s.unit || apu.unit), items });
+      toast.success(`Partida estructurada: ${total} recursos (${priced} con precio de tu historial)`, {
+        description: `${s.assumptions ? `Supuestos: ${s.assumptions}\n` : ''}Revisa cantidades y rendimientos, y completa los precios en $0.`,
+        duration: 20000,
+        closeButton: true
+      });
     } catch (e: any) {
       toast.error(`Error de IA: ${e?.message || 'No se pudo contactar a Gemini'}`);
     } finally { setIsAiLoading(false); }
@@ -122,8 +203,8 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
                 placeholder="Partida..."
                 className={`w-full text-xl font-bold rounded-xl px-6 pr-36 py-3 text-ink resize-none leading-tight ${emptyFieldClass(!apu.name)}`}
               />
-              <button onClick={handleAiSuggest} disabled={isAiLoading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-blue hover:bg-brand-blue-dark text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest">
-                {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-white" />} Analizar IA
+              <button onClick={handleAiStructure} disabled={isAiLoading} title="Genera materiales, mano de obra (HH por unidad) y equipos a partir del título y la unidad. No asigna precios, salvo los que ya estén en tu historial." className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-blue hover:bg-brand-blue-dark text-white px-4 py-2 rounded-xl flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest">
+                {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-white" />} Estructurar IA
               </button>
             </div>
           </div>
@@ -202,12 +283,19 @@ const APUEditor: React.FC<APUEditorProps> = ({ apu, onUpdate, history, project, 
             items={apu.items[activeTab]}
             onChange={newI => handleItemsChange(activeTab, newI)}
             history={history}
-            apuContext={apu.name}
             chapterName={chapter.name}
             onRegisterResource={onRegisterResource}
           />
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={confirmAiReplace}
+        onClose={() => setConfirmAiReplace(false)}
+        onConfirm={runAiStructure}
+        title="Reemplazar recursos de la partida"
+        message="La estructura generada por IA reemplazará todos los recursos actuales de esta partida (materiales, mano de obra, equipos y otros). ¿Continuar?"
+        confirmText="Sí, reemplazar"
+      />
     </div>
   );
 };

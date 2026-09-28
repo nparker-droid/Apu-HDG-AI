@@ -29,7 +29,7 @@ const geminiDevApi = (): Plugin => ({
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     // Variables del servidor para el handler local (GEMINI_API_KEY, GEMINI_MODELS, etc.)
-    for (const key of ['GEMINI_API_KEY', 'GEMINI_MODELS', 'GEMINI_SEARCH_MODELS', 'ALLOWED_ORIGINS']) {
+    for (const key of ['GEMINI_API_KEY', 'GEMINI_MODELS', 'ALLOWED_ORIGINS']) {
       if (env[key] && !process.env[key]) process.env[key] = env[key];
     }
     return {

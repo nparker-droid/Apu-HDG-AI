@@ -2,28 +2,29 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 /*
  * Proxy de Gemini pensado para el NIVEL GRATUITO de la Gemini API.
+ * Única función: estructurar un APU (recursos, unidades, cantidades y rendimientos) SIN precios.
+ *
  * El costo cero lo garantiza la key: debe pertenecer a un proyecto de Google AI Studio
  * SIN facturación. En ese caso, al agotar la cuota Google responde 429 y no cobra.
  *
  * Variables de entorno (Vercel):
- *   GEMINI_API_KEY          key del proyecto sin facturación (obligatoria)
- *   GEMINI_MODELS           modelos de texto en orden de preferencia, separados por coma
- *   GEMINI_SEARCH_MODELS    modelos para búsqueda web (Google Search). En nivel gratuito solo
- *                           la familia 2.5 Flash la incluye (cuota diaria compartida)
- *   ALLOWED_ORIGINS         orígenes adicionales permitidos (el dominio propio siempre se permite)
+ *   GEMINI_API_KEY    key del proyecto sin facturación (obligatoria)
+ *   GEMINI_MODELS     modelos en orden de preferencia, separados por coma. Si uno no existe
+ *                     o agotó su cuota diaria, se usa el siguiente.
+ *   ALLOWED_ORIGINS   orígenes adicionales permitidos (el dominio propio siempre se permite)
  */
-
-const SYSTEM_CONTEXT = "Eres un experto en ingenieria de costos y presupuestos de obras en Chile. Proporcionas analisis tecnicos precisos, rendimientos realistas y precios unitarios de mercado vigentes en CLP. No incluyas IVA en los precios.";
 
 const parseList = (value: string | undefined, fallback: string[]) => {
   const list = (value || '').split(',').map(s => s.trim()).filter(Boolean);
   return list.length ? list : fallback;
 };
 
-const TEXT_MODELS = parseList(process.env.GEMINI_MODELS, ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-const SEARCH_MODELS = parseList(process.env.GEMINI_SEARCH_MODELS, ['gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+// Flash (mejor calidad, ~20 solicitudes/día gratis) → Flash-Lite (~500/día gratis)
+const MODELS = parseList(process.env.GEMINI_MODELS, ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
 
 const MAX_TEXT = 300;
+const MAX_KNOWN_PER_CATEGORY = 40;
+const MAX_ITEMS_PER_CATEGORY = 15;
 const RATE_LIMIT = 20;               // solicitudes por minuto por IP (por instancia)
 const RATE_WINDOW_MS = 60_000;
 const hits = new Map<string, number[]>();
@@ -32,14 +33,6 @@ class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-const parseJsonObject = (text: string) => {
-  const cleaned = text.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('No JSON object found');
-  return JSON.parse(cleaned.slice(start, end + 1));
-};
-
 const text = (value: unknown, field: string, required = true): string => {
   const s = typeof value === 'string' ? value.trim() : '';
   if (required && !s) throw new HttpError(400, `Campo "${field}" requerido`);
@@ -47,35 +40,36 @@ const text = (value: unknown, field: string, required = true): string => {
   return s;
 };
 
-const num = (value: unknown, field: string): number => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) throw new HttpError(400, `Campo "${field}" debe ser numérico`);
-  return n;
-};
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === 'string').map(v => v.trim().slice(0, 80)).filter(Boolean).slice(0, MAX_KNOWN_PER_CATEGORY)
+    : [];
 
 const errorStatus = (e: any): number => Number(e?.status || e?.code || e?.error?.code) || 0;
 
-/** Modelo inexistente, retirado o no disponible para esta key: se prueba el siguiente */
+/** Modelo inexistente, retirado o no disponible para esta key */
 const isModelUnavailable = (e: any) => {
   const status = errorStatus(e);
   return status === 404 || (status === 400 && /not (found|supported|available)/i.test(e?.message || ''));
 };
 
-const quotaError = () => new HttpError(429, 'Se agotó la cuota gratuita de Gemini. Se renueva diariamente (medianoche, hora del Pacífico). Mientras tanto, ingresa los valores manualmente.');
+const QUOTA_MESSAGE = 'Se agotó la cuota gratuita diaria de Gemini. Se renueva cada día (medianoche, hora del Pacífico).';
 
-/** Ejecuta la llamada con el primer modelo disponible de la lista */
-const withModels = async <T>(models: string[], call: (model: string) => Promise<T>): Promise<T> => {
+/** Ejecuta la llamada con el primer modelo disponible y con cuota */
+const withModels = async <T>(call: (model: string) => Promise<T>): Promise<T> => {
+  let quotaExhausted = false;
   let lastError: any;
-  for (const model of models) {
+  for (const model of MODELS) {
     try {
       return await call(model);
     } catch (e: any) {
-      if (errorStatus(e) === 429) throw quotaError();
+      if (errorStatus(e) === 429) { quotaExhausted = true; continue; }
       if (!isModelUnavailable(e)) throw e;
       lastError = e;
     }
   }
-  throw new HttpError(503, `Ningún modelo de Gemini disponible (${models.join(', ')}). Revisa GEMINI_MODELS / GEMINI_SEARCH_MODELS. Detalle: ${lastError?.message || ''}`);
+  if (quotaExhausted) throw new HttpError(429, QUOTA_MESSAGE);
+  throw new HttpError(503, `Ningún modelo de Gemini disponible (${MODELS.join(', ')}). Revisa GEMINI_MODELS. Detalle: ${lastError?.message || ''}`);
 };
 
 const isAllowedOrigin = (req: any): boolean => {
@@ -98,30 +92,72 @@ const isRateLimited = (req: any): boolean => {
   return recent.length > RATE_LIMIT;
 };
 
-const apuSchema = {
+const resourceList = (quantityDescription: string) => ({
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      description: { type: Type.STRING, description: 'Denominación técnica del recurso' },
+      unit: { type: Type.STRING, description: 'Unidad del recurso' },
+      quantity: { type: Type.NUMBER, description: quantityDescription },
+      note: { type: Type.STRING, description: 'Supuesto o criterio de la cantidad, máximo 20 palabras' }
+    },
+    required: ['description', 'unit', 'quantity', 'note']
+  }
+});
+
+const structureSchema = {
   type: Type.OBJECT,
   properties: {
-    materials: {
-      type: Type.ARRAY,
-      items: { type: Type.OBJECT, properties: { description: { type: Type.STRING }, unit: { type: Type.STRING }, unitPrice: { type: Type.NUMBER }, quantity: { type: Type.NUMBER } }, required: ["description","unit","unitPrice","quantity"] }
-    },
-    labor: {
-      type: Type.ARRAY,
-      items: { type: Type.OBJECT, properties: { description: { type: Type.STRING }, unit: { type: Type.STRING }, unitPrice: { type: Type.NUMBER }, performance: { type: Type.NUMBER } }, required: ["description","unit","unitPrice","performance"] }
-    },
-    equipment: {
-      type: Type.ARRAY,
-      items: { type: Type.OBJECT, properties: { description: { type: Type.STRING }, unit: { type: Type.STRING }, unitPrice: { type: Type.NUMBER }, performance: { type: Type.NUMBER } }, required: ["description","unit","unitPrice","performance"] }
-    }
+    unit: { type: Type.STRING, description: 'Unidad de pago de la partida' },
+    assumptions: { type: Type.STRING, description: 'Condiciones supuestas para el análisis, máximo 50 palabras' },
+    materials: resourceList('Cantidad del material por 1 unidad de la partida, incluyendo pérdidas'),
+    labor: resourceList('Horas-hombre (HH) de esta especialidad por 1 unidad de la partida'),
+    equipment: resourceList('Horas-máquina (HM) u otra unidad del equipo por 1 unidad de la partida'),
+    others: resourceList('Cantidad por 1 unidad de la partida')
   },
-  required: ["materials","labor","equipment"]
+  required: ['unit', 'assumptions', 'materials', 'labor', 'equipment', 'others']
 };
 
-const priceSchema = {
-  type: Type.OBJECT,
-  properties: { price: { type: Type.NUMBER }, reasoning: { type: Type.STRING } },
-  required: ["price","reasoning"]
+const buildPrompt = (p: {
+  name: string; unit: string; chapter: string; project: string; location: string;
+  known: Record<string, string[]>;
+}) => {
+  const knownBlock = Object.entries(p.known)
+    .filter(([, list]) => list.length)
+    .map(([cat, list]) => `${cat}: ${list.join(' | ')}`)
+    .join('\n');
+
+  return `Eres ingeniero de costos con experiencia en presupuestos de obras civiles, hidráulicas y de edificación en Chile.
+Estructura el análisis de precio unitario (APU) de la partida indicada. NO entregues precios: solo recursos, unidades y cantidades.
+
+Partida: "${p.name}"
+Unidad de la partida: ${p.unit ? `"${p.unit}" (obligatoria: todas las cantidades se refieren a 1 ${p.unit})` : 'no definida: propone la unidad de pago habitual en Chile'}
+${p.chapter ? `Capítulo: "${p.chapter}"\n` : ''}${p.project ? `Proyecto: "${p.project}"\n` : ''}${p.location ? `Ubicación: "${p.location}"\n` : ''}
+Reglas:
+1. Todas las cantidades se expresan por 1 unidad de la partida.
+2. Materiales: cantidad neta más pérdidas o despuntes habituales; indica el % de pérdida en la nota.
+3. Mano de obra: cantidad = horas-hombre (HH) de cada especialidad por unidad de partida. NO uses rendimientos en unidades/día. Unidad "HH". Sin leyes sociales.
+4. Equipos: horas-máquina (HM) por unidad de partida, salvo que otra unidad sea más apropiada.
+5. Otros: solo si aplican (herramientas menores, fletes, ensayos, elementos de seguridad específicos).
+6. Usa denominaciones técnicas usadas en Chile (p.ej. "Hormigón G25", "Maestro de primera", "Jornal", "Retroexcavadora").
+7. Incluye solo recursos necesarios; usa listas vacías cuando una categoría no aplique.
+8. Si el título es ambiguo, adopta el caso más típico y decláralo en los supuestos.
+${knownBlock ? `9. Recursos ya usados por el usuario: si alguno equivale a un recurso que necesitas, usa EXACTAMENTE esa descripción.\n${knownBlock}` : ''}`;
 };
+
+interface CleanItem { description: string; unit: string; quantity: number; note: string }
+
+const cleanItems = (value: unknown): CleanItem[] =>
+  (Array.isArray(value) ? value : [])
+    .map((i: any) => ({
+      description: String(i?.description || '').trim().slice(0, 120),
+      unit: String(i?.unit || '').trim().slice(0, 12),
+      quantity: Math.round(Number(i?.quantity) * 10000) / 10000,
+      note: String(i?.note || '').trim().slice(0, 200)
+    }))
+    .filter(i => i.description && Number.isFinite(i.quantity) && i.quantity > 0)
+    .slice(0, MAX_ITEMS_PER_CATEGORY);
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -135,86 +171,47 @@ export default async function handler(req: any, res: any) {
   }
 
   const { action, ...params } = req.body || {};
-  const ai = new GoogleGenAI({ apiKey });
+  if (action !== 'structureApu') return res.status(400).json({ error: `Accion desconocida: ${action}` });
 
   try {
-    switch (action) {
-      case 'suggestApu': {
-        const name = text(params.name, 'name');
-        const response = await withModels(TEXT_MODELS, model => ai.models.generateContent({
-          model,
-          contents: `${SYSTEM_CONTEXT} Genera un analisis de precio unitario (APU) detallado para la partida: "${name}".`,
-          config: { responseMimeType: "application/json", responseSchema: apuSchema }
-        }));
-        return res.json(JSON.parse(response.text || '{}'));
+    const known = params.known || {};
+    const prompt = buildPrompt({
+      name: text(params.name, 'name'),
+      unit: text(params.unit, 'unit', false),
+      chapter: text(params.chapter, 'chapter', false),
+      project: text(params.project, 'project', false),
+      location: text(params.location, 'location', false),
+      known: {
+        Materiales: stringList(known.materials),
+        'Mano de obra': stringList(known.labor),
+        Equipos: stringList(known.equipment),
+        Otros: stringList(known.others)
       }
+    });
 
-      case 'deviation': {
-        const category = text(params.category, 'category');
-        const description = text(params.description, 'description');
-        const type = text(params.type, 'type');
-        const userVal = num(params.userVal, 'userVal');
-        const avgVal = num(params.avgVal, 'avgVal');
-        const response = await withModels(TEXT_MODELS, model => ai.models.generateContent({
-          model,
-          contents: `${SYSTEM_CONTEXT} En el contexto de "${description}" (${category}), el usuario ingreso un ${type} de ${userVal} CLP, pero el promedio de mercado es ${avgVal} CLP. Explica brevemente, maximo 15 palabras, por que podria existir esta desviacion en Chile.`
-        }));
-        return res.json({ text: response.text?.trim() || "Desviacion fuera de rango." });
-      }
+    const ai = new GoogleGenAI({ apiKey });
+    const { response, model } = await withModels(async model => ({
+      model,
+      response: await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: "application/json", responseSchema: structureSchema, temperature: 0.2 }
+      })
+    }));
 
-      case 'webPrice': {
-        const description = text(params.description, 'description');
-        const unit = text(params.unit, 'unit', false) || 'UN';
-        const apuContext = text(params.apuContext, 'apuContext', false);
-
-        // 1) Búsqueda web con Google Search: en nivel gratuito solo la familia 2.5 Flash la incluye.
-        //    Si no está disponible para la key o se agotó su cuota, se pasa a la estimación sin web.
-        try {
-          const prompt = `${SYSTEM_CONTEXT}\nBusca en la web precios reales y actualizados de mercado en Chile para el siguiente recurso de construccion:\nRecurso: "${description}"\nUnidad de medida: "${unit}"\nContexto de la partida de obra: "${apuContext}"\n\nPrioriza comercios, proveedores, licitaciones, presupuestos o referencias chilenas. Estima un precio unitario neto en CLP, entero, sin IVA.\nDevuelve solamente JSON valido, sin markdown y sin texto adicional:\n{"price":12345,"reasoning":"explicacion corta en maximo 35 palabras","sources":["url o comercio consultado"]}`;
-          const response = await withModels(SEARCH_MODELS, model => ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: { tools: [{ googleSearch: {} }] }
-          }));
-          // Sin JSON válido no se intenta adivinar el precio desde el texto (capturaba años u otras cifras)
-          const parsed = parseJsonObject(response.text || '');
-          const price = Math.round(Number(parsed.price) || 0);
-          const groundingSources = (response as any).candidates?.[0]?.groundingMetadata?.groundingChunks
-            ?.map((chunk: any) => chunk.web?.uri || chunk.web?.title)
-            ?.filter(Boolean) || [];
-          if (price > 0 && groundingSources.length > 0) {
-            return res.json({
-              price,
-              reasoning: parsed.reasoning || "Precio estimado con busqueda web.",
-              sources: Array.from(new Set([...(parsed.sources || []), ...groundingSources])),
-              source: 'web'
-            });
-          }
-        } catch (e: any) {
-          console.warn('[Gemini Proxy] busqueda web no disponible, se usa estimacion sin web:', e?.message);
-        }
-
-        // 2) Estimación del modelo sin búsqueda web (sin fuentes verificables)
-        const fallback = await withModels(TEXT_MODELS, model => ai.models.generateContent({
-          model,
-          contents: `${SYSTEM_CONTEXT} Estima un precio unitario neto en CLP sin IVA para "${description}", unidad "${unit}", usado en "${apuContext}" en Chile.`,
-          config: { responseMimeType: "application/json", responseSchema: priceSchema }
-        }));
-        const parsed = parseJsonObject(fallback.text || '{}');
-        return res.json({
-          price: Math.round(Number(parsed.price) || 0),
-          reasoning: parsed.reasoning || "Estimacion IA sin fuente web.",
-          sources: [],
-          source: 'ia'
-        });
-      }
-
-      default:
-        return res.status(400).json({ error: `Accion desconocida: ${action}` });
-    }
+    const raw = JSON.parse(response.text || '{}');
+    return res.json({
+      unit: String(raw.unit || '').trim().slice(0, 12),
+      assumptions: String(raw.assumptions || '').trim().slice(0, 400),
+      materials: cleanItems(raw.materials),
+      labor: cleanItems(raw.labor),
+      equipment: cleanItems(raw.equipment),
+      others: cleanItems(raw.others),
+      model
+    });
   } catch (error: any) {
     if (error instanceof HttpError) return res.status(error.status).json({ error: error.message });
-    if (errorStatus(error) === 429) return res.status(429).json({ error: quotaError().message });
+    if (errorStatus(error) === 429) return res.status(429).json({ error: QUOTA_MESSAGE });
     console.error('[Gemini Proxy]', error);
     return res.status(502).json({ error: 'Error al consultar Gemini. Intenta nuevamente.' });
   }

@@ -1,8 +1,34 @@
-import { ItemCategory } from "../types";
-
 // Todas las llamadas pasan por /api/gemini, donde vive la key (server-side).
 // En producción lo sirve Vercel; en desarrollo (npm run dev) lo sirve un middleware de Vite
 // (ver vite.config.ts) que ejecuta el mismo handler. La key nunca llega al navegador.
+
+export interface StructuredResource {
+  description: string;
+  unit: string;
+  /** Por 1 unidad de partida. Mano de obra: HH por unidad; equipos: HM por unidad */
+  quantity: number;
+  note: string;
+}
+
+export interface StructuredApu {
+  unit: string;
+  assumptions: string;
+  materials: StructuredResource[];
+  labor: StructuredResource[];
+  equipment: StructuredResource[];
+  others: StructuredResource[];
+  model: string;
+}
+
+export interface StructureApuRequest {
+  name: string;
+  unit?: string;
+  chapter?: string;
+  project?: string;
+  location?: string;
+  /** Descripciones de recursos ya usados por el usuario, para reutilizar su nomenclatura */
+  known?: { materials?: string[]; labor?: string[]; equipment?: string[]; others?: string[] };
+}
 
 const callProxy = async (action: string, params: object): Promise<any> => {
   const response = await fetch('/api/gemini', {
@@ -17,33 +43,6 @@ const callProxy = async (action: string, params: object): Promise<any> => {
   return response.json();
 };
 
-// ── API pública ────────────────────────────────────────────────────────────────
-
-export const getApuSuggestions = async (name: string) => callProxy('suggestApu', { name });
-
-export const getDeviationReasoning = async (
-  category: ItemCategory,
-  description: string,
-  userVal: number,
-  avgVal: number,
-  type: string
-): Promise<string> => {
-  try {
-    const result = await callProxy('deviation', { category, description, userVal, avgVal, type });
-    return result.text || "Desviacion fuera de rango.";
-  } catch {
-    // Explicación opcional: si no hay cuota o conexión, basta con la alerta de desviación
-    return "Desviacion fuera de rango.";
-  }
-};
-
-/**
- * Precio de un recurso. `source` indica el origen:
- * 'web' → búsqueda en Google con fuentes; 'ia' → estimación del modelo sin fuentes verificables.
- */
-export const getResourcePriceFromWeb = async (
-  description: string,
-  unit: string,
-  apuContext: string
-): Promise<{ price: number; reasoning: string; sources: string[]; source: 'web' | 'ia' }> =>
-  callProxy('webPrice', { description, unit, apuContext: apuContext.slice(0, 300) });
+/** Estructura un APU (recursos, unidades y cantidades por unidad de partida) sin precios */
+export const structureApu = async (req: StructureApuRequest): Promise<StructuredApu> =>
+  callProxy('structureApu', req);
