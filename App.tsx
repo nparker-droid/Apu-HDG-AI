@@ -23,7 +23,7 @@ import { Toaster, toast } from 'sonner';
 import {
   initDriveAuth, requestDriveAccess, saveAllToDrive, loadFromDrive,
   isDriveConnected, disconnectDrive, getLastSyncTime, GOOGLE_CLIENT_ID,
-  autoReconnectDrive
+  autoReconnectDrive, inspectDriveBackup, DriveOverwriteGuardError, DriveAuthRequiredError
 } from './services/driveService';
 
 const safeUUID = () => crypto.randomUUID();
@@ -54,6 +54,9 @@ const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [driveConnected, setDriveConnected] = useState(false);
+  // Respaldo automático en pausa porque sobrescribiría un respaldo ajeno o más completo
+  const [driveGuard, setDriveGuard] = useState<DriveOverwriteGuardError | null>(null);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const activeProject = useMemo(() =>
@@ -97,10 +100,39 @@ const App: React.FC = () => {
     if (JSON.stringify(newApus) !== JSON.stringify(apus)) setApus(newApus);
   }, [chapters, apus, activeProjectId]);
 
-  // Reconexión silenciosa a Drive al cargar la página
+  /** Tras conectar: si el respaldo en Drive no proviene de este equipo, pausa el auto-guardado */
+  const checkRemoteBackup = async () => {
+    try {
+      const remote = await inspectDriveBackup();
+      if (remote?.foreign) {
+        setDriveGuard(new DriveOverwriteGuardError('foreign', remote, projectsRef.current.length));
+        toast.warning('Hay un respaldo en Drive que no proviene de este equipo', {
+          description: `Guardado el ${new Date(remote.savedAt).toLocaleString('es-CL')} con ${remote.projectCount} proyecto(s). El respaldo automático queda en pausa hasta que restaures desde Drive o guardes manualmente.`,
+          duration: 15000,
+          closeButton: true
+        });
+      }
+    } catch { /* se revisará de nuevo al guardar */ }
+  };
+
+  const handleDriveExpired = () => {
+    setDriveConnected(false);
+    toast.warning('La sesión de Google Drive expiró', {
+      description: 'El respaldo automático está detenido. Vuelve a conectar Drive para reanudarlo.',
+      duration: 15000,
+      closeButton: true
+    });
+  };
+
+  // Al cargar la página: recupera la sesión de Drive si el token sigue vigente (sin popup)
   useEffect(() => {
-    autoReconnectDrive().then(connected => {
-      setDriveConnected(connected);
+    autoReconnectDrive().then(state => {
+      if (state === 'connected') {
+        setDriveConnected(true);
+        checkRemoteBackup();
+      } else if (state === 'expired') {
+        toast.info('Reconecta Google Drive para reanudar el respaldo automático.', { duration: 8000 });
+      }
     });
   }, []);
 
@@ -141,16 +173,43 @@ const App: React.FC = () => {
   const projectsRef = useRef(projects);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
 
-  // Auto-save a Drive cada 5 minutos si el usuario está conectado
+  const driveGuardRef = useRef(driveGuard);
+  useEffect(() => { driveGuardRef.current = driveGuard; }, [driveGuard]);
+
+  // Auto-save a Drive cada 5 minutos si el usuario está conectado.
+  // Revisa cada minuto si el token venció (dura ~1 h) para avisar en vez de fallar en silencio.
   useEffect(() => {
+    let ticks = 0;
+    let failureNotified = false;
     const timer = setInterval(async () => {
       if (!driveConnectedRef.current) return;
+      if (!isDriveConnected()) { handleDriveExpired(); return; }
+      if (++ticks % 5 !== 0 || driveGuardRef.current) return;
       try {
-        await saveAllToDrive(projectsRef.current);
-        setDriveStatus('synced');
-        setTimeout(() => setDriveStatus('idle'), 2000);
-      } catch { /* fallo silencioso en auto-save — el usuario puede guardar manualmente */ }
-    }, 5 * 60 * 1000);
+        if (await saveAllToDrive(projectsRef.current)) {
+          setDriveStatus('synced');
+          setTimeout(() => setDriveStatus('idle'), 2000);
+        }
+        failureNotified = false;
+      } catch (e: any) {
+        if (e instanceof DriveAuthRequiredError) { handleDriveExpired(); return; }
+        if (e instanceof DriveOverwriteGuardError) {
+          setDriveGuard(e);
+          toast.warning('Respaldo automático en Drive en pausa', {
+            description: e.reason === 'foreign'
+              ? `El respaldo en Drive fue guardado desde otro equipo (${new Date(e.remote.savedAt).toLocaleString('es-CL')}). Restaura desde Drive o guarda manualmente para decidir cuál conservar.`
+              : `Drive tiene ${e.remote.projectCount} proyectos y este equipo ${e.localCount}. Guarda manualmente si la eliminación fue intencional.`,
+            duration: 15000,
+            closeButton: true
+          });
+          return;
+        }
+        if (!failureNotified) {
+          failureNotified = true;
+          toast.error(`Falló el respaldo automático en Drive: ${e?.message || 'Error de red'}`);
+        }
+      }
+    }, 60 * 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -202,6 +261,7 @@ const App: React.FC = () => {
       setDriveStatus('synced');
       toast.success('Google Drive conectado correctamente');
       setTimeout(() => setDriveStatus('idle'), 2000);
+      await checkRemoteBackup();
     } catch (e: any) {
       setDriveStatus('error');
       toast.error(`Error conectando Drive: ${e?.message || 'Error desconocido'}`);
@@ -209,15 +269,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDriveSave = async () => {
+  const handleDriveSave = async (force = false) => {
     if (!isDriveConnected()) { await handleDriveConnect(); if (!isDriveConnected()) return; }
     try {
       setDriveStatus('syncing');
-      await saveAllToDrive(projects);
+      await saveAllToDrive(projects, { force });
+      setDriveGuard(null);
       setDriveStatus('synced');
       toast.success('Proyecto guardado en Google Drive');
       setTimeout(() => setDriveStatus('idle'), 2000);
     } catch (e: any) {
+      if (e instanceof DriveOverwriteGuardError) {
+        setDriveGuard(e);
+        setConfirmOverwrite(true);
+        setDriveStatus('idle');
+        return;
+      }
+      if (e instanceof DriveAuthRequiredError) setDriveConnected(false);
       setDriveStatus('error');
       toast.error(`Error guardando en Drive: ${e?.message || 'Error de red'}`);
       setTimeout(() => setDriveStatus('idle'), 3000);
@@ -253,6 +321,7 @@ const App: React.FC = () => {
       const backup = await loadFromDrive();
       if (!backup) { toast.info('No se encontró copia de seguridad en Drive.'); setDriveStatus('idle'); return; }
       reloadFromStorage();
+      setDriveGuard(null);
       setDriveStatus('synced');
       toast.success(`Restaurado desde Drive (${new Date(backup.savedAt).toLocaleString('es-CL')})`);
       setTimeout(() => setDriveStatus('idle'), 2000);
@@ -266,6 +335,7 @@ const App: React.FC = () => {
   const handleDriveDisconnect = () => {
     disconnectDrive();
     setDriveConnected(false);
+    setDriveGuard(null);
     toast.info('Google Drive desconectado');
   };
 
@@ -462,9 +532,17 @@ const App: React.FC = () => {
                             Último backup: {new Date(getLastSyncTime()!).toLocaleString('es-CL')}
                           </p>
                         )}
+                        {driveGuard && (
+                          <p className="text-[8px] text-amber-300 font-bold mb-2 leading-snug">
+                            Respaldo automático en pausa: {driveGuard.reason === 'foreign'
+                              ? 'el respaldo en Drive viene de otro equipo. Restaura o guarda manualmente.'
+                              : 'este equipo tiene muchos menos proyectos que Drive.'}
+                          </p>
+                        )}
+                        <p className="text-[8px] text-slate-500 mb-2">Se conservan las últimas 15 versiones con fecha en la misma carpeta.</p>
                         <div className="space-y-1">
                           <button
-                            onClick={handleDriveSave}
+                            onClick={() => handleDriveSave()}
                             disabled={driveStatus === 'syncing'}
                             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-60"
                           >
@@ -749,6 +827,18 @@ const App: React.FC = () => {
         title="Restaurar desde Google Drive"
         message="Se reemplazarán TODOS los proyectos locales por la copia de Drive. Antes de restaurar se descargará automáticamente un respaldo local (JSON) por seguridad. ¿Continuar?"
         confirmText="Sí, respaldar y restaurar"
+      />
+      <ConfirmationModal
+        isOpen={confirmOverwrite && !!driveGuard}
+        onClose={() => setConfirmOverwrite(false)}
+        onConfirm={() => { setConfirmOverwrite(false); handleDriveSave(true); }}
+        title="Sobrescribir respaldo en Drive"
+        message={driveGuard
+          ? `${driveGuard.reason === 'foreign'
+              ? 'El respaldo en Drive fue guardado desde otro equipo o navegador'
+              : 'El respaldo en Drive tiene bastantes más proyectos que este equipo'} (${new Date(driveGuard.remote.savedAt).toLocaleString('es-CL')}, ${driveGuard.remote.projectCount} proyecto(s)). Este equipo tiene ${driveGuard.localCount} proyecto(s). Si continúas, el respaldo actual se conservará como versión con fecha en la carpeta de Drive y será reemplazado por la copia de este equipo. ¿Continuar?`
+          : ''}
+        confirmText="Sí, sobrescribir Drive"
       />
     </div>
   );
