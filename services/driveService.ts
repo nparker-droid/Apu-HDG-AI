@@ -1,14 +1,14 @@
-import { Project, Chapter, APU, HistoryItem } from '../types';
+import { Project } from '../types';
+import {
+  BackupFile, RemoteBackupInfo, BackupGuardError, buildBackup, collectBackupData, applyBackup,
+  backupInfo, isSuspiciousShrink, formatBackupStamp
+} from './backupData';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'APU Hidrogestion';
 const FILE_NAME = 'apu-engine-backup.json';
-const LIB_KEY = 'apu_engine_library';
-const PROJECT_PREFIX = 'apu_engine_project_';
-const HISTORY_KEY = 'apu_history';
-const RESOURCES_KEY = 'apu_user_resource_library';
 const SYNC_TIMESTAMP_KEY = 'apu_drive_last_sync';
 const FOLDER_ID_CACHE_KEY = 'apu_drive_folder_id';
 // Persistencia del token entre recargas de página
@@ -26,40 +26,11 @@ const MAX_SNAPSHOTS = 15;
 
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-interface DriveBackup {
-  version: string;
-  savedAt: string;
-  library: Project[];
-  projectData: Record<string, { metadata: Project; chapters: Chapter[]; apus: APU[] }>;
-  history: HistoryItem[];
-  userResources: any[];
-}
-
-/** Estado del respaldo principal en Drive */
-export interface RemoteBackupInfo {
-  savedAt: string;
-  projectCount: number;
-}
-
 /** La sesión de Drive expiró: requiere un clic del usuario para renovarla (popup de Google). */
 export class DriveAuthRequiredError extends Error {
   constructor() {
     super('La sesión de Google Drive expiró. Vuelve a conectar Drive.');
     this.name = 'DriveAuthRequiredError';
-  }
-}
-
-/**
- * Se bloqueó una escritura que podría destruir el respaldo remoto:
- * - 'foreign': el respaldo en Drive no lo escribió ni restauró este equipo.
- * - 'shrink': la copia local tiene muchos menos proyectos que la remota.
- */
-export class DriveOverwriteGuardError extends Error {
-  constructor(public reason: 'foreign' | 'shrink', public remote: RemoteBackupInfo, public localCount: number) {
-    super(reason === 'foreign'
-      ? 'El respaldo en Drive fue guardado desde otro equipo o sesión.'
-      : 'La copia local tiene muchos menos proyectos que el respaldo en Drive.');
-    this.name = 'DriveOverwriteGuardError';
   }
 }
 
@@ -273,14 +244,8 @@ const findBackupFile = async (folderId: string): Promise<BackupFileMeta | null> 
   }
   // Respaldo antiguo sin appProperties: se lee el contenido para conocer fecha y n° de proyectos
   const contentRes = await driveRequest(`${DRIVE_API}/files/${file.id}?alt=media`);
-  const backup: Partial<DriveBackup> = await contentRes.json().catch(() => ({}));
-  return {
-    id: file.id,
-    info: {
-      savedAt: backup.savedAt || file.modifiedTime || '',
-      projectCount: Array.isArray(backup.library) ? backup.library.length : 0
-    }
-  };
+  const backup: Partial<BackupFile> = await contentRes.json().catch(() => ({}));
+  return { id: file.id, info: backupInfo(backup, file.modifiedTime || '') };
 };
 
 const getLastKnownRemote = (): string | null => {
@@ -302,10 +267,6 @@ const isRemoteKnown = (remote: RemoteBackupInfo): boolean => {
   return new Date(remote.savedAt).getTime() <= new Date(lastSync).getTime();
 };
 
-/** Protección contra respaldos locales vacíos o truncados */
-const isSuspiciousShrink = (localCount: number, remoteCount: number): boolean =>
-  remoteCount > 0 && (localCount === 0 || (remoteCount >= 4 && localCount <= remoteCount / 2));
-
 /**
  * Revisa el respaldo en Drive sin modificarlo. Devuelve null si no existe
  * y `foreign: true` si no proviene de este equipo (p.ej. equipo nuevo o navegador limpio).
@@ -315,13 +276,6 @@ export const inspectDriveBackup = async (): Promise<(RemoteBackupInfo & { foreig
   const existing = await findBackupFile(folderId);
   if (!existing) return null;
   return { ...existing.info, foreign: !isRemoteKnown(existing.info) };
-};
-
-const formatSnapshotStamp = (iso: string) => {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
 };
 
 /**
@@ -341,7 +295,7 @@ const snapshotBeforeOverwrite = async (folderId: string, existing: BackupFileMet
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: `${SNAPSHOT_PREFIX}${formatSnapshotStamp(existing.info.savedAt)}.json`,
+        name: `${SNAPSHOT_PREFIX}${formatBackupStamp(existing.info.savedAt)}.json`,
         parents: [folderId],
         appProperties: { savedAt: existing.info.savedAt, projectCount: String(existing.info.projectCount) }
       })
@@ -363,41 +317,28 @@ const buildMultipart = (metadata: object, content: string) => {
 
 /**
  * Sube el respaldo completo a Drive.
- * Sin `force`, lanza DriveOverwriteGuardError si el respaldo remoto no proviene de este equipo
+ * Sin `force`, lanza BackupGuardError si el respaldo remoto no proviene de este equipo
  * o si la copia local es sospechosamente menor. Con `force` (tras confirmación del usuario)
  * sobrescribe, guardando antes una versión con fecha del respaldo anterior.
  * Devuelve false si no había cambios que subir.
  */
 export const saveAllToDrive = async (projects: Project[], opts: { force?: boolean } = {}): Promise<boolean> => {
   const force = !!opts.force;
-  const projectData: DriveBackup['projectData'] = {};
-  for (const p of projects) {
-    try {
-      const raw = localStorage.getItem(`${PROJECT_PREFIX}${p.id}`);
-      if (raw) projectData[p.id] = JSON.parse(raw);
-    } catch { /**/ }
-  }
-
-  let history: HistoryItem[] = [];
-  let userResources: any[] = [];
-  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { /**/ }
-  try { userResources = JSON.parse(localStorage.getItem(RESOURCES_KEY) || '[]'); } catch { /**/ }
-
-  const payload = JSON.stringify({ library: projects, projectData, history, userResources });
+  const payload = JSON.stringify(collectBackupData(projects));
   if (!force && payload === lastUploadedPayload) return false;
 
   const folderId = await getOrCreateFolder();
   const existing = await findBackupFile(folderId);
 
   if (existing && !force) {
-    if (!isRemoteKnown(existing.info)) throw new DriveOverwriteGuardError('foreign', existing.info, projects.length);
+    if (!isRemoteKnown(existing.info)) throw new BackupGuardError('drive', 'foreign', existing.info, projects.length);
     if (isSuspiciousShrink(projects.length, existing.info.projectCount)) {
-      throw new DriveOverwriteGuardError('shrink', existing.info, projects.length);
+      throw new BackupGuardError('drive', 'shrink', existing.info, projects.length);
     }
   }
 
   const savedAt = new Date().toISOString();
-  const backup: DriveBackup = { version: '2.0', savedAt, library: projects, projectData, history, userResources };
+  const backup = buildBackup(projects, savedAt);
   const content = JSON.stringify(backup, null, 2);
   const appProperties = { savedAt, projectCount: String(projects.length) };
 
@@ -420,20 +361,15 @@ export const saveAllToDrive = async (projects: Project[], opts: { force?: boolea
   return true;
 };
 
-export const loadFromDrive = async (): Promise<DriveBackup | null> => {
+export const loadFromDrive = async (): Promise<BackupFile | null> => {
   const folderId = await getOrCreateFolder();
   const file = await findBackupFile(folderId);
   if (!file) return null;
 
   const res = await driveRequest(`${DRIVE_API}/files/${file.id}?alt=media`);
-  const backup: DriveBackup = await res.json();
+  const backup: BackupFile = await res.json();
 
-  try { localStorage.setItem(LIB_KEY, JSON.stringify(backup.library || [])); } catch { /**/ }
-  for (const [id, data] of Object.entries(backup.projectData || {})) {
-    try { localStorage.setItem(`${PROJECT_PREFIX}${id}`, JSON.stringify(data)); } catch { /**/ }
-  }
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(backup.history || [])); } catch { /**/ }
-  try { localStorage.setItem(RESOURCES_KEY, JSON.stringify(backup.userResources || [])); } catch { /**/ }
+  applyBackup(backup);
 
   // A partir de aquí este equipo queda sincronizado con ese respaldo
   setLastKnownRemote(file.info.savedAt);
