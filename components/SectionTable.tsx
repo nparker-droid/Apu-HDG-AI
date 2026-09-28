@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Sparkles, Loader2, ClipboardPaste, X, Check, Copy, HelpCircle, StickyNote } from 'lucide-react';
+import { Plus, Trash2, ClipboardPaste, X, Check, Copy, HelpCircle, StickyNote } from 'lucide-react';
 import NumberInput from './ui/NumberInput';
 import { parseNumber, formatNumber } from '../lib/number';
 import { computeItemTotal } from '../lib/apuCalculations';
-import { APUItem, ItemCategory, HistoryItem, SingleFieldSuggestion } from '../types';
-import { getDeviationReasoning, getFieldSuggestion, getResourcePriceFromWeb } from '../services/geminiService';
+import { APUItem, ItemCategory, HistoryItem } from '../types';
 import { STANDARD_LIBRARY } from '../data/standardLibrary';
 import { formatUnit } from '../services/exportService';
 import { formatCLP } from '../lib/number';
@@ -15,18 +14,8 @@ interface SectionTableProps {
   items: APUItem[];
   onChange: (items: APUItem[]) => void;
   history: HistoryItem[];
-  apuContext?: string;
   chapterName?: string;
   onRegisterResource?: (item: HistoryItem) => void;
-}
-
-interface DeviationAlert {
-  itemId: string;
-  field: 'unitPrice' | 'performance';
-  avgValue: number;
-  reasoning: string;
-  isLoading: boolean;
-  isAiSuggestion?: boolean;
 }
 
 const parseLocaleNumber = (value: string | number) => parseNumber(value, 'money');
@@ -40,18 +29,14 @@ const SectionTable: React.FC<SectionTableProps> = ({
   items,
   onChange,
   history,
-  apuContext,
   chapterName,
   onRegisterResource
 }) => {
   const [showHistoryForIdx, setShowHistoryForIdx] = useState<number | null>(null);
-  const [activeAlert, setActiveAlert] = useState<DeviationAlert | null>(null);
-  const [isAiLoadingField, setIsAiLoadingField] = useState<string | null>(null);
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [loadingPriceItemIds, setLoadingPriceItemIds] = useState<Record<string, boolean>>({});
   const [hasCopiedItem, setHasCopiedItem] = useState(false);
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
 
@@ -140,63 +125,10 @@ const SectionTable: React.FC<SectionTableProps> = ({
     toast.success(`${parsedItems.length} recursos pegados correctamente`);
   };
 
-  const formatPriceSources = (sources: string[] | undefined): string => {
-    if (!sources || sources.length === 0) return '';
-    const seen = new Set<string>();
-    const labels: string[] = [];
-    for (const s of sources) {
-      if (labels.length >= 4) break;
-      try {
-        const host = new URL(s).hostname.replace(/^www\./, '');
-        // URLs de redirección interna de Gemini Search Grounding → mostrar como "Google Search"
-        const label = host.includes('vertexaisearch') || host.includes('googleapis') || host.includes('google.com')
-          ? 'Google Search'
-          : host;
-        if (!seen.has(label)) { seen.add(label); labels.push(label); }
-      } catch {
-        const fallback = s.length > 30 ? s.substring(0, 30) + '…' : s;
-        if (!seen.has(fallback)) { seen.add(fallback); labels.push(fallback); }
-      }
-    }
-    return labels.length ? `Fuentes: ${labels.join(', ')}` : '';
-  };
-
-  const handleGeneratePrice = async (item: APUItem, index: number) => {
-    if (!item.description || item.description.trim() === '') {
-      toast.error('Por favor, ingresa una descripción para el recurso primero.');
-      return;
-    }
-
-    setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: true }));
-    const loadingToastId = toast.loading(`Buscando precios en la web para "${item.description}"…`);
-
-    try {
-      const result = await getResourcePriceFromWeb(item.description, item.unit || 'UN', apuContext || '');
-      toast.dismiss(loadingToastId);
-      if (result && result.price > 0) {
-        updateItem(index, 'unitPrice', result.price);
-        toast.success(`Precio sugerido: ${formatCLP(result.price)}`, {
-          description: `${result.reasoning}${result.sources?.length ? '\n' + formatPriceSources(result.sources) : ''}`,
-          duration: 12000,
-          closeButton: true,
-        });
-      } else {
-        toast.warning('La IA no pudo encontrar un precio preciso. Por favor ingresa el precio manualmente.');
-      }
-    } catch (error) {
-      toast.dismiss(loadingToastId);
-      console.error(error);
-      toast.error('Error al consultar el precio con IA.');
-    } finally {
-      setLoadingPriceItemIds(prev => ({ ...prev, [item.id]: false }));
-    }
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setShowHistoryForIdx(null);
-        setActiveAlert(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -283,27 +215,6 @@ const SectionTable: React.FC<SectionTableProps> = ({
     setTimeout(() => setShowHistoryForIdx(null), 300);
   };
 
-  const checkDeviation = async (item: APUItem, field: 'unitPrice' | 'performance') => {
-    if (!item || !item.description || Number(item[field]) === 0) return;
-    const combinedHistory = [...(history || []).filter(h => h.category === category), ...libraryItems];
-    const matches = combinedHistory.filter(h => h.description.toLowerCase() === item.description.toLowerCase());
-    if (matches.length < 1) return;
-
-    const values = matches.map(h => field === 'unitPrice' ? Number(h.unitPrice) : (Number(h.performance) || 0)).filter(v => v > 0);
-    if (values.length === 0) return;
-
-    const avg = values.reduce((acc, curr) => acc + curr, 0) / values.length;
-    const userVal = Number(item[field]);
-    if (isNaN(userVal) || avg === 0) return;
-
-    const deviation = Math.abs(userVal - avg) / avg;
-    if (deviation > 0.25) {
-      setActiveAlert({ itemId: item.id, field, avgValue: avg, reasoning: 'Analizando...', isLoading: true });
-      const reasoning = await getDeviationReasoning(category, item.description, userVal, avg, field === 'unitPrice' ? 'precio' : 'rendimiento');
-      setActiveAlert(prev => prev ? { ...prev, reasoning, isLoading: false } : null);
-    }
-  };
-
   const isLabor = category === ItemCategory.MANO_DE_OBRA;
 
   return (
@@ -388,7 +299,7 @@ const SectionTable: React.FC<SectionTableProps> = ({
                   minDecimals={3}
                   maxDecimals={4}
                   onValueChange={v => updateItem(idx, isLabor ? 'performance' : 'quantity', v)}
-                  onBlur={() => { checkDeviation(items[idx], 'performance'); handleBlurItem(idx); }}
+                  onBlur={() => handleBlurItem(idx)}
                   className={`w-full text-right bg-transparent rounded-lg font-mono text-sm font-bold text-brand-green ${emptyFieldClass((Number(isLabor ? item.performance : item.quantity) || 0) === 0)}`}
                 />
               </td>
@@ -401,22 +312,9 @@ const SectionTable: React.FC<SectionTableProps> = ({
                     minDecimals={0}
                     maxDecimals={2}
                     onValueChange={v => updateItem(idx, 'unitPrice', v)}
-                    onBlur={() => { checkDeviation(items[idx], 'unitPrice'); handleBlurItem(idx); }}
+                    onBlur={() => handleBlurItem(idx)}
                     className={`w-full text-right bg-transparent border-none focus:ring-0 font-mono text-sm font-bold text-muted-dark p-0 ${(Number(item.unitPrice) || 0) === 0 ? 'text-status-red' : ''}`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleGeneratePrice(item, idx)}
-                    disabled={loadingPriceItemIds[item.id]}
-                    title="Obtener precio sugerido por IA y Web"
-                    className="p-1 text-muted-light hover:text-brand-blue transition-colors rounded disabled:opacity-50"
-                  >
-                    {loadingPriceItemIds[item.id] ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-brand-blue" />
-                    ) : (
-                      <Sparkles className="w-3.5 h-3.5 text-brand-green" />
-                    )}
-                  </button>
                 </div>
               </td>
               <td className="text-right pr-4 font-mono text-sm font-bold text-brand-blue">${formatThousands(Number(item.total) || 0)}</td>

@@ -53,12 +53,11 @@ const SECTIONS: SectionData[] = [
     icon: <Cpu className="w-4 h-4" />,
     label: 'Inteligencia Artificial',
     steps: [
-      { text: 'Generar APU con IA — ingresa el nombre de la partida y pulsa "Sugerir con IA". Crea todos los ítems automáticamente.' },
-      { text: 'Precio web — botón ✦ en cada ítem busca precios en proveedores chilenos en tiempo real.' },
-      { text: 'Alerta de desviación — si un precio difiere del histórico, aparece indicador naranja con análisis contextual.' },
-      { text: 'Sugerencia de campo — la IA autocompleta descripción, unidad y rendimiento según el contexto del APU.' },
+      { text: 'Estructurar con IA — define el título y la unidad de la partida y pulsa "Estructurar IA". Genera materiales, mano de obra y equipos con cantidades por unidad de partida.' },
+      { text: 'Convenciones — mano de obra en HH por unidad de partida (sin leyes sociales); equipos en HM por unidad; materiales con pérdidas incluidas. Cada recurso trae una nota con el supuesto usado.' },
+      { text: 'Precios — la IA no asigna precios. Solo se completan los recursos que coinciden con tu historial o el catálogo estándar; el resto queda en $0 para cotizar.' },
     ],
-    tip: 'La búsqueda de precios web (botón ✦) requiere el plan de pago de la API de Gemini. Las demás funciones IA operan en tier gratuito.',
+    tip: 'Funciona con el nivel gratuito de Gemini. Revisa siempre cantidades y rendimientos: es una propuesta de estructura, no un APU validado.',
   },
   {
     id: 'drive',
